@@ -1,0 +1,17 @@
+# Cliente del juego: es propiedad de Webzen, NUNCA se sube al repo
+client/*
+!client/README.md
+
+# Secretos y configuracion local
+.env
+
+# Herramientas descargadas / binarios
+tools/*
+!tools/README.md
+
+# Editor / SO
+.vs/
+.vscode/*
+!.vscode/extensions.json
+Thumbs.db
+desktop.ini

@@ -1,0 +1,6 @@
+[submodule "server/OpenMU"]
+	path = server/OpenMU
+	url = https://github.com/MUnique/OpenMU.git
+[submodule "client-src/MuMain"]
+	path = client-src/MuMain
+	url = https://github.com/sven-n/MuMain.git

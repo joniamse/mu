@@ -50,6 +50,7 @@ Para que sea reproducible, todo cambio de configuración que hagamos a mano qued
 | Script | Contenido |
 |---|---|
 | [rates.sql](../server/sql/rates.sql) | Experiencia x5, zen x2 |
+| [dev-anticheat.sql](../server/sql/dev-anticheat.sql) | **Solo para desarrollo:** el anti speed-hack avisa pero no banea ni desconecta (MuMain da falsos positivos). Revertir con `dev-anticheat-revert.sql` antes de abrir al público |
 
 ## Actualizar OpenMU
 
@@ -77,3 +78,5 @@ Para que sea reproducible, todo cambio de configuración que hagamos a mano qued
 | "la ejecución de scripts está deshabilitada" | Usar los `.cmd` en lugar de los `.ps1`. |
 | El cliente no conecta a `127.0.0.1` | El cliente bloquea esa IP. Usar `127.127.127.127`. |
 | `libgssapi_krb5.so.2` en los logs | Aviso inofensivo del driver de PostgreSQL. |
+| "Unusual activity detected (speed check)" en el juego | Falso positivo del anti-cheat con MuMain. Con `dev-anticheat.sql` aplicado es solo un aviso. Pendiente: investigar el cliente. |
+| Errores de la UI nueva | Buscar `[rmlui]` en `client-src\MuMain\out\build\windows-x64\src\Release\MuError.log`. |

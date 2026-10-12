@@ -23,13 +23,19 @@
 - [ ] Leer la arquitectura y el sistema de plugins
 
 ## Etapa 3 – Calidad gráfica (cliente MuMain)
-Prioridad del usuario: mejorar los gráficos con shaders y texturas HD de mapas, armas, armaduras, etc.
-- [ ] Analizar el render de MuMain (SDL GPU, pipeline, shaders actuales, formatos de modelo `.bmd` y de textura `.ozj`/`.ozt`)
-- [ ] Ajustes rápidos: resolución, anisotrópico, MSAA y mipmaps
+Prioridad del usuario: UI moderna y escalable, y después gráficos (shaders, texturas HD). Detalle en [GRAFICOS-UI.md](GRAFICOS-UI.md).
+- [x] Análisis del render y de la UI de MuMain
+- [x] Decisión: UI nueva desde cero con RmlUi, migrada ventana por ventana
+- [x] Prueba de concepto: panel de vitales con RmlUi funcionando en el juego
+- [ ] Fork de MuMain en GitHub y push de la rama `feature/rmlui-hud`
+- [ ] Base de la UI nueva: input, imágenes PNG, ocultar partes viejas, estilo base
+- [ ] Migración de ventanas (HUD completa, minimapa, inventario, personaje, ...)
+- [ ] Ajustes rápidos de render: anisotrópico, MSAA, mipmaps
 - [ ] Post-procesado: bloom, color grading, SSAO, FXAA/SMAA
 - [ ] Iluminación: normal maps y specular, sombras
-- [ ] Pipeline de texturas HD: herramientas de conversión e upscaling (ESRGAN u otros), priorizando mapas → armas → armaduras
+- [ ] Texturas HD de modelos 3D: conversión + Real-ESRGAN, priorizando mapas → armas → armaduras
 - [ ] Modelos mejorados: herramientas de import/export de `.bmd`
+- [ ] Investigar los falsos positivos del anti speed-hack con MuMain
 
 ## Etapa 4 – Mecánicas propias
 - [ ] Definir el estilo del servidor (fiel, low-rate o high-rate, custom)

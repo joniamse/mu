@@ -62,6 +62,24 @@ Para que sea reproducible, todo cambio de configuración que hagamos a mano qued
 6. Verificar que las rates sigan bien: `.\server\db.cmd server\sql\rates.sql` (es idempotente)
 7. Commit del nuevo puntero del submódulo.
 
+## Cliente MuMain (fork)
+
+`client-src/MuMain` apunta a nuestro fork [joniamse/MuMain](https://github.com/joniamse/MuMain), rama
+`feature/rmlui-hud`. El proyecto original es el remoto `upstream`.
+
+Traer las novedades del original:
+
+```bash
+git -C client-src/MuMain fetch upstream
+```
+
+```bash
+git -C client-src/MuMain merge upstream/main
+```
+
+Después: `.\client-src\build-client.cmd`, probar, `git -C client-src/MuMain push` y commit del nuevo puntero
+del submódulo en este repo.
+
 ## Historial
 
 - **2026-10-12**: se aplicaron 29 configuration updates (Castle Siege, Kanturu, Imperial Guardian,

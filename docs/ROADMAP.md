@@ -27,7 +27,7 @@ Prioridad del usuario: UI moderna y escalable, y después gráficos (shaders, te
 - [x] Análisis del render y de la UI de MuMain
 - [x] Decisión: UI nueva desde cero con RmlUi, migrada ventana por ventana
 - [x] Prueba de concepto: panel de vitales con RmlUi funcionando en el juego
-- [ ] Fork de MuMain en GitHub y push de la rama `feature/rmlui-hud`
+- [x] Fork de MuMain en GitHub ([joniamse/MuMain](https://github.com/joniamse/MuMain)) y push de la rama `feature/rmlui-hud`
 - [ ] Base de la UI nueva: input, imágenes PNG, ocultar partes viejas, estilo base
 - [ ] Migración de ventanas (HUD completa, minimapa, inventario, personaje, ...)
 - [ ] Ajustes rápidos de render: anisotrópico, MSAA, mipmaps

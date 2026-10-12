@@ -1,12 +1,14 @@
 # Ajustes propios sobre deploy/all-in-one de OpenMU (no tocamos el submodulo).
-# Usar con server/up.ps1
+# Usar con server/up.cmd. Las rutas relativas se resuelven desde deploy/all-in-one.
 services:
   openmu-startup:
+    # Imagen compilada desde nuestro codigo (server/OpenMU/src), no la de Docker Hub
+    image: mu/openmu:dev
+    build:
+      context: ../../src
+      dockerfile: Startup/Dockerfile
     environment:
       # Para jugar en esta misma PC. Para LAN usar "local"; online, "public" o la IP fija.
       RESOLVE_IP: ${RESOLVE_IP:-loopback}
-    # La imagen de Docker Hub inicializa la DB con los puertos viejos (5590x / 55980),
-    # y el compose oficial solo publica los nuevos (4590x). Publicamos ambos.
-    ports:
-      - "55901-55906:55901-55906"
-      - "55980:55980"
+    # Puertos: los publica el compose oficial (44405-44406, 45901-45906, 45980).
+    # La DB ya fue migrada de 5590x a 4590x con la config update "Move server ports out of the dynamic port range".

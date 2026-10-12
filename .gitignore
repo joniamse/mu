@@ -5,6 +5,9 @@ client/*
 # Secretos y configuracion local
 .env
 
+# Backups de la DB (contienen cuentas)
+backups/
+
 # Herramientas descargadas / binarios
 tools/*
 !tools/README.md

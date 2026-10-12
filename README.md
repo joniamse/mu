@@ -1,55 +1,54 @@
 # MU Season 6 – servidor propio
 
-Servidor de MU Online Season 6 basado en [OpenMU](https://github.com/MUnique/OpenMU).
-Corre en Docker.
+Servidor de MU Online Season 6 basado en [OpenMU](https://github.com/MUnique/OpenMU), con el cliente
+open-source [MuMain](https://github.com/sven-n/MuMain). Corre en Docker.
+
+- **Hoja de ruta:** [docs/ROADMAP.md](docs/ROADMAP.md)
+- **Operación diaria** (comandos, puertos, backups, actualizaciones, problemas conocidos): [docs/OPERACIONES.md](docs/OPERACIONES.md)
 
 ## Estructura
 
 | Carpeta | Contenido |
 |---|---|
-| `server/OpenMU` | Código de OpenMU (git submodule) |
-| `client-src/MuMain` | Cliente open-source MuMain (git submodule) |
+| `server/OpenMU` | Código del servidor OpenMU (git submodule) |
+| `server/` | Nuestro override de Docker, scripts y `sql/` con la configuración versionada |
+| `client-src/MuMain` | Código del cliente MuMain (git submodule) |
+| `client-src/` | Scripts para compilar y abrir el cliente |
+| `docs/` | Hoja de ruta, operación y decisiones |
 | `client/` | Otros clientes y launcher. **No se versiona** |
-| `docs/` | Hoja de ruta, notas y decisiones |
 | `tools/` | Herramientas de terceros (vcpkg, etc.). No se versiona |
+| `backups/` | Backups de la DB. No se versiona |
 
-Los scripts `.ps1` tienen un `.cmd` al lado que los ejecuta sin cambiar la política de ejecución de
-PowerShell. Se pueden abrir con doble clic.
+Cada script `.ps1` tiene al lado un `.cmd` que lo ejecuta sin cambiar la política de ejecución de
+PowerShell. Se puede abrir con doble clic.
 
-## Levantar el servidor local
+## Inicio rápido
 
-Requisitos: Docker Desktop y Git.
+Requisitos del servidor: Docker Desktop y Git. Requisitos del cliente: VS 2022 Build Tools (C++ + CMake),
+el .NET 10 SDK y Python 3. vcpkg va en `tools/vcpkg`; ver [client-src/build-client.ps1](client-src/build-client.ps1).
 
 ```bash
 git clone --recurse-submodules https://github.com/joniamse/mu.git
-cd mu
-.\server\up.cmd
 ```
 
-`up.cmd` admite las acciones `up` (por defecto), `down`, `logs` y `pull`. Usa el compose oficial de OpenMU más
-[server/docker-compose.local.yml](server/docker-compose.local.yml), que contiene nuestros ajustes:
-IP loopback y los puertos viejos que usa la imagen de Docker Hub.
+```bash
+.\server\up.cmd build
+```
 
-- Panel de administración: http://localhost/
-- Connect server (cliente original): `127.127.127.127:44405`
-- Connect server (cliente open-source MuMain): puerto `44406`
-- Game servers: `55901-55906` (la DB actual); chat: `55980`
-- Cuentas de prueba: `test0`…`test9`, `test300`, `test400`, `testgm`, etc. La contraseña es igual al usuario.
-  **Hay que borrarlas antes de abrir el servidor al público.**
-
-## Cliente (MuMain)
-
-`client-src/MuMain` es el cliente open-source ([sven-n/MuMain](https://github.com/sven-n/MuMain)).
-Para compilarlo hacen falta las VS 2022 Build Tools (C++ + CMake), el .NET 10 SDK, Python 3 y vcpkg en `tools/vcpkg`.
+```bash
+.\server\db.cmd server\sql\rates.sql
+```
 
 ```bash
 .\client-src\build-client.cmd
 ```
 
-Para jugar (se conecta a `127.127.127.127:44406`):
-
 ```bash
 .\client-src\play.cmd
 ```
 
-Ver [docs/ROADMAP.md](docs/ROADMAP.md).
+- Panel de administración: http://localhost/
+- El cliente se conecta a `127.127.127.127:44406`
+- Rates: experiencia x5, zen x2 ([server/sql/rates.sql](server/sql/rates.sql))
+- Cuentas de prueba: `test0`…`test9`, `test300`, `test400`, `testgm`, etc. La contraseña es igual al usuario.
+  **Hay que borrarlas antes de abrir el servidor al público.**

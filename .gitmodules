@@ -3,4 +3,5 @@
 	url = https://github.com/MUnique/OpenMU.git
 [submodule "client-src/MuMain"]
 	path = client-src/MuMain
-	url = https://github.com/sven-n/MuMain.git
+	url = https://github.com/joniamse/MuMain.git
+	branch = feature/rmlui-hud

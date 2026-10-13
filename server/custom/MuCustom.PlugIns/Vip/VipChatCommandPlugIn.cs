@@ -89,6 +89,7 @@ public class VipChatCommandPlugIn : IChatCommandPlugIn
         if (result.Outcome is VipPurchaseOutcome.Purchased or VipPurchaseOutcome.Renewed)
         {
             VipService.Set(player, result.Status);
+            await AuraService.BroadcastIfChangedAsync(player).ConfigureAwait(false);
             player.Logger.LogInformation("MuCustom: {Player} bought VIP {Level} ({Outcome}).", player.Name, definition.Name, result.Outcome);
         }
 

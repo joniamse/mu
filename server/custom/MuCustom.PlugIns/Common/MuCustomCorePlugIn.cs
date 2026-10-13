@@ -101,6 +101,7 @@ public class MuCustomCorePlugIn : IPeriodicTaskPlugIn, ISupportCustomConfigurati
                 var before = VipService.GetLevel(player);
                 await VipService.RefreshAsync(player).ConfigureAwait(false);
                 var after = VipService.GetLevel(player);
+                await AuraService.BroadcastIfChangedAsync(player).ConfigureAwait(false);
                 if (before.Level > 0 && after.Level == 0)
                 {
                     await player.ShowBlueMessageAsync($"[VIP] Tu membresia {before.Name} vencio. Renuevala con /vip.").ConfigureAwait(false);

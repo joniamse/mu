@@ -73,6 +73,7 @@ public class PlayerLifecyclePlugIn : IPlayerStateChangedPlugIn, ICharacterSelect
             else if (IsOutOfTheWorld(currentState) && !IsOutOfTheWorld(previousState))
             {
                 VipService.Forget(player);
+                AuraService.Forget(player);
                 await DailyQuestService.UnloadAsync(player, player.Logger).ConfigureAwait(false);
             }
         }
@@ -113,6 +114,7 @@ public class PlayerLifecyclePlugIn : IPlayerStateChangedPlugIn, ICharacterSelect
 
         await CashRepository.EnsureAccountAsync(account.GetId()).ConfigureAwait(false);
         await VipService.RefreshAsync(player).ConfigureAwait(false);
+        await AuraService.OnEnteredWorldAsync(player).ConfigureAwait(false);
         await DailyQuestService.LoadAsync(player).ConfigureAwait(false);
         await OffStoreService.ShowStoreStatusAsync(player).ConfigureAwait(false);
 

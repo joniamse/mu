@@ -110,10 +110,10 @@ index d983608f3..3407bcb98 100644
      /// Gets actions queued from outside the AI tick (e.g. skill learning on level-up), which the
      /// <see cref="OfflinePlayerMuHelper"/> drains at the start of each tick. This serializes such
 diff --git a/src/GameLogic/Offline/OfflinePlayerManager.cs b/src/GameLogic/Offline/OfflinePlayerManager.cs
-index c025c2c87..a6db2b519 100644
+index c025c2c87..a6364e28c 100644
 --- a/src/GameLogic/Offline/OfflinePlayerManager.cs
 +++ b/src/GameLogic/Offline/OfflinePlayerManager.cs
-@@ -28,7 +28,20 @@ public sealed class OfflinePlayerManager
+@@ -28,7 +28,24 @@ public sealed class OfflinePlayerManager
      /// <param name="realPlayer">The real player who typed the command.</param>
      /// <param name="loginName">The pre-validated account login name.</param>
      /// <returns><c>true</c> if the offline session was started successfully.</returns>
@@ -130,12 +130,16 @@ index c025c2c87..a6db2b519 100644
 +    /// <param name="loginName">The pre-validated account login name.</param>
 +    /// <param name="offlinePlayerFactory">The factory which creates the offline player, e.g. a derived type with another behaviour.</param>
 +    /// <param name="chargeInitialZenCost">If set to <c>true</c>, the initial zen cost of the MU helper is charged.</param>
++    /// <param name="returnToCharacterSelection">
++    /// If set to <c>true</c>, the real player goes back to the character selection instead of being disconnected,
++    /// so it can play with another character. Only for an offline player with <see cref="OfflinePlayer.StaysOnLogin"/>.
++    /// </param>
 +    /// <returns><c>true</c> if the offline session was started successfully.</returns>
-+    public async ValueTask<bool> StartAsync(Player realPlayer, string loginName, Func<IGameContext, OfflinePlayer> offlinePlayerFactory, bool chargeInitialZenCost)
++    public async ValueTask<bool> StartAsync(Player realPlayer, string loginName, Func<IGameContext, OfflinePlayer> offlinePlayerFactory, bool chargeInitialZenCost, bool returnToCharacterSelection = false)
      {
          var characterName = realPlayer.SelectedCharacter?.Name;
  
-@@ -37,7 +50,7 @@ public sealed class OfflinePlayerManager
+@@ -37,7 +54,7 @@ public sealed class OfflinePlayerManager
              return false;
          }
  
@@ -144,7 +148,7 @@ index c025c2c87..a6db2b519 100644
  
          // Atomically claim the slot to prevent racing during initialization.
          if (!this._activePlayers.TryAdd(loginName, sentinel))
-@@ -46,7 +59,7 @@ public sealed class OfflinePlayerManager
+@@ -46,7 +63,7 @@ public sealed class OfflinePlayerManager
              return false;
          }
  
@@ -153,6 +157,23 @@ index c025c2c87..a6db2b519 100644
          {
              await this.RemoveAndDisposeAsync(loginName, sentinel).ConfigureAwait(false);
              return false;
+@@ -54,7 +71,15 @@ public sealed class OfflinePlayerManager
+ 
+         try
+         {
+-            await this.TransitionToOfflineAsync(realPlayer).ConfigureAwait(false);
++            if (returnToCharacterSelection)
++            {
++                // Leaving the world saves the character, so the offline player loads its current state.
++                await new PlayerActions.LogoutAction().LogoutAsync(realPlayer, LogoutType.BackToCharacterSelection).ConfigureAwait(false);
++            }
++            else
++            {
++                await this.TransitionToOfflineAsync(realPlayer).ConfigureAwait(false);
++            }
+ 
+             if (!await sentinel.InitializeAsync(loginName, characterName).ConfigureAwait(false))
+             {
 diff --git a/src/GameLogic/PlayerActions/Character/SelectCharacterAction.cs b/src/GameLogic/PlayerActions/Character/SelectCharacterAction.cs
 index 42a326249..5d2bb7204 100644
 --- a/src/GameLogic/PlayerActions/Character/SelectCharacterAction.cs

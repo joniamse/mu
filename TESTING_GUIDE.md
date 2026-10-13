@@ -48,7 +48,7 @@ no hay servicios externos. La recarga de fichas es **simulada** (no hay pagos re
 | `/fichas` | Saldo de la cuenta. |
 | `/recargar` | Lista de paquetes. `/recargar <1-6>` acredita un paquete (simulado). |
 | `/baul [1-5]` | Muestra o cambia el baúl activo (se abre en el NPC del baúl). |
-| `/offstore` | Con la tienda personal abierta: deja la tienda en el mundo y desconecta. `/offstore cerrar` la cierra desde otro personaje. |
+| `/offstore` | En una ciudad y con la tienda personal abierta: deja la tienda en el mundo. Con Diamante vuelve a la selección de personaje; con los demás niveles cierra el juego. `/offstore cerrar` la cierra desde otro personaje. |
 | `/entradas` | Entradas diarias VIP a Blood Castle y Devil Square. |
 | `/diarias` | Misiones del día con su progreso, p. ej. `[34/50 Death Knight]`. |
 | `/reclamar [N]` | Cobra las misiones completas (o solo la N). |
@@ -130,7 +130,7 @@ Lo mismo sin ventana: `/recargar 6`, `/vip comprar 2`, `/fichas`, `/vip`.
 | Chaos Machine | Al combinar, el log del servidor muestra `Crafting success chance: 60 %` y luego `Crafting success chance modified by plugins: 63 %` (Plata). |
 | MU Helper | El cobro periódico del helper baja (Plata -30%, Oro -50%, Platino/Diamante gratis). |
 | Baúles | `/baul 2` y abrir el NPC del baúl: aparece vacío; poner un item, `/baul 1`, abrir: está el baúl original. Sin VIP, `/baul 2` se rechaza. |
-| Tienda offline | Abrir la tienda personal (S), poner precios, abrirla y escribir `/offstore`: el juego se cierra y la tienda queda. Desde otra cuenta se ve y se puede comprar. Con Plata/Oro dura 12/24 h y se cierra al volver a entrar con la cuenta. Con Diamante se puede entrar con otro personaje; `/offstore cerrar` la cierra. |
+| Tienda offline | En una ciudad (zona segura), abrir la tienda personal (inventario **I** y luego **S**, o `/personalshop`), poner precios, abrirla y escribir `/offstore`. Fuera de la ciudad se rechaza. Con Plata/Oro/Platino el juego se cierra y la tienda queda (12 h / 24 h / sin límite); al volver a entrar con la cuenta se cierra. Con Diamante el juego vuelve a la selección de personaje: elegí otro y seguí jugando mientras la tienda queda en la ciudad; `/offstore cerrar` la cierra. Desde otra cuenta: **clic en el cartel de la tienda** para ver y comprar. |
 | Entradas BC/DS | `/entradas` entrega los tickets del día (según nivel del personaje); una segunda vez avisa que ya se reclamaron. |
 
 Los logs del servidor (`.\server\up.cmd logs`) muestran cada compra y recarga con el prefijo `MuCustom:`.
@@ -247,3 +247,9 @@ pip install -r tools\requirements.txt
 - [ ] Ya aplicado en `client-src/MuMain/src/Localization/Dialog.es.resx` (78 cambios: reescrituras + ortografía, p. ej. "piedrá", "vió", "Atlance", "Y?Semeden"). Correrlo de nuevo da 0 cambios.
 - [ ] Recompilar el cliente y hablar con Pasi, el guardián del baúl o el Chaos Goblin con el juego en español: textos nuevos.
 - [ ] `--cities devias`, `--no-rewrite --clean-all` (solo ortografía de todo el archivo), `--report cambios.md`.
+
+
+## 10. Tienda personal en el cliente
+
+- [ ] Clic en el cartel de la tienda de otro jugador (se ilumina al pasar el mouse): se abre la tienda.
+- [ ] Con tu tienda abierta no podés moverte: el chat muestra "Con la tienda personal abierta no puedes moverte...".

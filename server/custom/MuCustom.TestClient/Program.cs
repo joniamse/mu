@@ -116,6 +116,15 @@ foreach (var command in options.Commands)
             await connection.SendPlayerShopItemBuyRequestAsync(playerId, parts[1], byte.Parse(parts[2]));
         }
     }
+    else if (command.StartsWith("!elegir ", StringComparison.Ordinal))
+    {
+        // From the character selection (e.g. after a logout): asks for the list and enters with that character.
+        await connection.SendRequestCharacterListAsync(0);
+        await Task.Delay(1000);
+        await connection.SendSelectCharacterAsync(command[8..]);
+        await Task.Delay(1000);
+        await connection.SendClientReadyAfterMapChangeAsync();
+    }
     else if (command.StartsWith("!tienda ", StringComparison.Ordinal))
     {
         await connection.SendPlayerShopOpenAsync(command[8..]);
@@ -150,6 +159,9 @@ void Handle(byte[] packet)
         case 0xF1 when subCode == 0x00:
             hello.TrySetResult();
             break;
+        case 0xF1 when subCode == 0x02:
+            Console.WriteLine($"<< logout: tipo {packet[headerSize + 2]} (1 = vuelta a la seleccion de personaje)");
+            break;
         case 0xF1 when subCode == 0x01:
             var result = ((LoginResponseRef)packet.AsSpan()).Success;
             Console.WriteLine($"<< login: {result}");
@@ -159,7 +171,7 @@ void Handle(byte[] packet)
             characterList.TrySetResult();
             break;
         case 0xF3 when subCode == 0x03:
-            Console.WriteLine($"<< en el mundo con {options.Character}");
+            Console.WriteLine("<< entro al mundo un personaje");
             inWorld.TrySetResult();
             break;
         case 0x0D:

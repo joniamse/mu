@@ -53,6 +53,12 @@ public static class OffStoreService
             return "No puedes dejar una tienda offline aqui.";
         }
 
+        // The store stays where the character stands: only in a town, where nobody can attack it.
+        if (!player.IsAtSafezone())
+        {
+            return "La tienda offline solo se puede dejar en una ciudad (zona segura).";
+        }
+
         var manager = player.GameContext.OfflinePlayerManager;
         if (manager.IsActive(loginName))
         {
@@ -63,12 +69,21 @@ public static class OffStoreService
         var staysOnLogin = level.OffStoreWhilePlaying;
         var until = expiresAt is { } e ? $"durante {level.OffStore!.Value.TotalHours:0} horas" : "sin limite de tiempo";
         var whilePlaying = staysOnLogin
-            ? " Puedes entrar con otro personaje mientras tanto."
+            ? " Elige otro personaje para seguir jugando."
             : " Si vuelves a entrar con esta cuenta, la tienda se cierra.";
         await player.ShowBlueMessageAsync($"[Tienda] Tu tienda queda abierta {until}.{whilePlaying}").ConfigureAwait(false);
 
         var storeName = character.StoreName;
-        if (!await manager.StartAsync(player, loginName, context => new OfflineShopPlayer(context, expiresAt, staysOnLogin), false).ConfigureAwait(false))
+        if (staysOnLogin)
+        {
+            // The player goes back to the character selection, with this character's data loaded
+            // while the store starts selling: it stays locked for this session.
+            LockCharacter(player, character.Name);
+        }
+
+        // With Diamante the player goes back to the character selection to play another character;
+        // otherwise the game closes, like the offline leveling does.
+        if (!await manager.StartAsync(player, loginName, context => new OfflineShopPlayer(context, expiresAt, staysOnLogin), false, staysOnLogin).ConfigureAwait(false))
         {
             return "No se pudo iniciar la tienda offline.";
         }

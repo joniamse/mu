@@ -5,7 +5,6 @@ client loads them from Data/Effect/Modern (see GameLogic/Vip/VipAura.cpp):
 
   aura_sigil  a rotating magic circle: rings, a hexagram and rune marks (Platino, Diamante)
   aura_halo   a thin glowing ring, floated over the head (Diamante)
-  aura_beam   a soft vertical light, stacked into a column of light (Diamante)
   aura_orb    a bright orb with a soft corona, for the orbiting lights (Platino, Diamante)
 
 With --kenney, it also converts the textures it uses from Kenney's Particle Pack (CC0, public
@@ -88,19 +87,6 @@ def halo():
     return finish(img, glow=8)
 
 
-def beam():
-    """A tall soft ellipse: brightest along a vertical line, fading to the sides and the ends."""
-    img = Image.new("L", (SIZE, SIZE), 0)
-    pixels = img.load()
-    for y in range(SIZE):
-        fy = (y - SIZE / 2) / (SIZE / 2)
-        for x in range(SIZE):
-            fx = (x - SIZE / 2) / (SIZE / 2)
-            v = math.exp(-(fx * fx) / 0.03) * max(0.0, 1 - fy * fy) ** 1.5
-            pixels[x, y] = int(255 * v)
-    return img
-
-
 def orb():
     img = Image.new("L", (SIZE, SIZE), 0)
     pixels = img.load()
@@ -116,13 +102,13 @@ def orb():
 KENNEY = {
     "star_06": "star_soft",     # rising sparkles (Oro)
     "star_07": "star_sharp",    # rising sparkles (Platino)
-    "star_08": "star_burst",    # rising sparkles (Diamante)
     "magic_02": "runes",        # rune circle on the ground (Oro)
     "twirl_02": "vortex",       # spinning vortex on the ground (Platino)
     "twirl_03": "vortex_wide",  # spinning vortex on the ground (Diamante)
     "trace_07": "pillar",       # the column of light (Diamante)
-    "spark_06": "bolt",         # the lightning strike (Diamante)
-    "light_01": "flash",        # the ground flash of a strike (Diamante)
+    "flame_05": "flame_1",      # flames licking up around the feet (Diamante)
+    "flame_06": "flame_2",
+    "circle_02": "shockwave",   # the ring of fire spreading on the ground (Diamante)
     "spark_01": "arc_1",        # electric arcs crackling around the body (Platino, Diamante)
     "spark_02": "arc_2",
     "spark_03": "arc_3",
@@ -154,7 +140,7 @@ def main():
 
     out = args.data / "Effect" / "Modern"
     out.mkdir(parents=True, exist_ok=True)
-    textures = {"aura_sigil": sigil(), "aura_halo": halo(), "aura_beam": beam(), "aura_orb": orb()}
+    textures = {"aura_sigil": sigil(), "aura_halo": halo(), "aura_orb": orb()}
     if args.kenney:
         textures.update(kenney(args.kenney))
     for name, image in textures.items():

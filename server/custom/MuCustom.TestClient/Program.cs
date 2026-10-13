@@ -116,6 +116,11 @@ foreach (var command in options.Commands)
             await connection.SendPlayerShopItemBuyRequestAsync(playerId, parts[1], byte.Parse(parts[2]));
         }
     }
+    else if (command == "!servidor")
+    {
+        // "Select server" in the game menu: leaves the world; the client then closes this connection.
+        await connection.SendLogOutAsync(LogOutType.BackToServerSelection);
+    }
     else if (command == "!salir")
     {
         // Back to the character selection, like the game menu does.

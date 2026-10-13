@@ -234,7 +234,7 @@ public static class OffStoreService
     /// Opens the offline store which was captured when the player left the world.
     /// </summary>
     /// <param name="player">The player.</param>
-    /// <param name="disconnected"><c>true</c> when the player closed the game; <c>false</c> when it went back to the character selection.</param>
+    /// <param name="disconnected"><c>true</c> when the connection is closing; <c>false</c> when the player left the world but is still connected.</param>
     /// <returns>The task.</returns>
     public static async ValueTask StartPendingAsync(Player player, bool disconnected)
     {
@@ -243,13 +243,15 @@ public static class OffStoreService
             return;
         }
 
-        PendingStores.Remove(player);
-
-        // Going back to the character selection keeps the account logged in: only Diamante allows playing meanwhile.
+        // Still connected (back to the character or server selection): the account stays logged in, and only
+        // Diamante allows playing meanwhile. For the others the store waits for the disconnection - "select
+        // server" disconnects right after - and is discarded if the player enters the world again.
         if (!disconnected && !pending.StaysOnLogin)
         {
             return;
         }
+
+        PendingStores.Remove(player);
 
         var manager = player.GameContext.OfflinePlayerManager;
         if (!await manager.StartAsync(player.GameContext, pending.LoginName, pending.CharacterName, context => new OfflineShopPlayer(context, pending.ExpiresAtUtc, pending.StaysOnLogin)).ConfigureAwait(false))
@@ -265,6 +267,12 @@ public static class OffStoreService
 
         player.Logger.LogInformation("MuCustom: the store of {Character} stays open offline.", pending.CharacterName);
     }
+
+    /// <summary>
+    /// Forgets a store which waited for the disconnection, because the player selects a character again.
+    /// </summary>
+    /// <param name="player">The player.</param>
+    public static void DiscardPending(Player player) => PendingStores.Remove(player);
 
     private static void LockCharacter(Player player, string characterName)
     {

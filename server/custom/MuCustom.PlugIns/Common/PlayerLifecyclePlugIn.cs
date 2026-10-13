@@ -85,6 +85,9 @@ public class PlayerLifecyclePlugIn : IPlayerStateChangedPlugIn, ICharacterSelect
     /// <inheritdoc />
     public async ValueTask CharacterSelectingAsync(Player player, Character character, CancelEventArgs cancelEventArgs)
     {
+        // Playing again in this session: a store which waited for the disconnection is not kept open.
+        OffStoreService.DiscardPending(player);
+
         if (await OffStoreService.PreventSelectionAsync(player, character.Name).ConfigureAwait(false))
         {
             player.Logger.LogInformation("MuCustom: {Character} had an offline store during this session; the player has to log in again to use it.", character.Name);

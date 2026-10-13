@@ -8,7 +8,11 @@ client loads them from Data/Effect/Modern (see GameLogic/Vip/VipAura.cpp):
   aura_beam   a soft vertical light, stacked into a column of light (Diamante)
   aura_orb    a bright orb with a soft corona, for the orbiting lights (Platino, Diamante)
 
-    python tools/aura_textures.py client-src/MuMain/src/bin/Data [--preview DIR]
+With --kenney, it also converts the textures it uses from Kenney's Particle Pack (CC0, public
+domain: https://kenney.nl/assets/particle-pack), the folder "PNG (Black background)" of the
+downloaded zip, to aura_<name> (see KENNEY below).
+
+    python tools/aura_textures.py client-src/MuMain/src/bin/Data [--kenney "DIR"] [--preview DIR]
 """
 
 from __future__ import annotations
@@ -108,6 +112,29 @@ def orb():
     return img
 
 
+# Kenney Particle Pack textures -> aura_<name>, scaled to 256 x 256.
+KENNEY = {
+    "star_06": "star_soft",     # rising sparkles (Oro)
+    "star_07": "star_sharp",    # rising sparkles (Platino)
+    "star_08": "star_burst",    # rising sparkles (Diamante)
+    "star_09": "orb_flare",     # the core of the orbiting lights
+    "magic_02": "runes",        # rune circle on the ground (Oro)
+    "twirl_02": "vortex",       # spinning vortex on the ground (Platino)
+    "twirl_03": "vortex_wide",  # spinning vortex on the ground (Diamante)
+    "trace_07": "pillar",       # the column of light (Diamante)
+    "spark_06": "bolt",         # the lightning strike (Diamante)
+    "light_01": "flash",        # the ground flash of a strike (Diamante)
+}
+
+
+def kenney(folder: pathlib.Path):
+    result = {}
+    for source, name in KENNEY.items():
+        image = Image.open(folder / f"{source}.png").convert("L").resize((SIZE, SIZE), Image.LANCZOS)
+        result[f"aura_{name}"] = image
+    return result
+
+
 def write_ozj(image: Image.Image, path: pathlib.Path):
     buffer = io.BytesIO()
     image.convert("RGB").save(buffer, "JPEG", quality=95)
@@ -118,12 +145,15 @@ def write_ozj(image: Image.Image, path: pathlib.Path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("data", type=pathlib.Path, help="the client's Data folder")
+    parser.add_argument("--kenney", type=pathlib.Path, help='the "PNG (Black background)" folder of the Kenney Particle Pack')
     parser.add_argument("--preview", type=pathlib.Path, help="also write PNG previews here")
     args = parser.parse_args()
 
     out = args.data / "Effect" / "Modern"
     out.mkdir(parents=True, exist_ok=True)
     textures = {"aura_sigil": sigil(), "aura_halo": halo(), "aura_beam": beam(), "aura_orb": orb()}
+    if args.kenney:
+        textures.update(kenney(args.kenney))
     for name, image in textures.items():
         write_ozj(image, out / f"{name}.OZJ")
         print(f"{name}: {image.size[0]}x{image.size[1]}")

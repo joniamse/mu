@@ -124,7 +124,17 @@ def kenney(folder: pathlib.Path):
     return result
 
 
+def clear_edges(image: Image.Image, border=6) -> Image.Image:
+    """Fades the outermost pixels to black: the game clamps textures, so a lit edge would be
+    stretched over the whole ground (a streak across the screen)."""
+    mask = Image.new("L", image.size, 0)
+    ImageDraw.Draw(mask).rectangle((border, border, image.size[0] - 1 - border, image.size[1] - 1 - border), fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(border / 2))
+    return ImageChops.multiply(image.convert("L"), mask)
+
+
 def write_ozj(image: Image.Image, path: pathlib.Path):
+    image = clear_edges(image)
     buffer = io.BytesIO()
     image.convert("RGB").save(buffer, "JPEG", quality=95)
     # .ozj: 24 bytes the loader skips, then the JPEG.

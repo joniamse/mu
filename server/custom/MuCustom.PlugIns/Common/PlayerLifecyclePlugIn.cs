@@ -20,8 +20,37 @@ using MUnique.OpenMU.PlugIns;
 [PlugIn]
 [Display(Name = "MuCustom: ciclo del jugador", Description = "Carga VIP, fichas y misiones diarias al entrar al juego y las guarda al salir.")]
 [Guid("8F4C2A6D-1E3B-4D97-A0C5-7B2E9F1D3C48")]
-public class PlayerLifecyclePlugIn : IPlayerStateChangedPlugIn, ICharacterSelectingPlugIn
+public class PlayerLifecyclePlugIn : IPlayerStateChangedPlugIn, ICharacterSelectingPlugIn, IPlayerLeavingWorldPlugIn, IPlayerLeftWorldPlugIn
 {
+    /// <inheritdoc />
+    public async ValueTask PlayerLeftWorldAsync(Player player)
+    {
+        // The character is saved and the account is still logged in, so nobody can enter with it
+        // before the offline store exists. A disconnecting player is already in the disconnected state.
+        try
+        {
+            await OffStoreService.StartPendingAsync(player, player.PlayerState.CurrentState == PlayerState.Disconnected).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            player.Logger.LogError(ex, "MuCustom: could not start the offline store of {Player}.", player.Name);
+        }
+    }
+
+    /// <inheritdoc />
+    public async ValueTask PlayerLeavingWorldAsync(Player player)
+    {
+        // A player who leaves with an open personal store keeps it open offline, if the membership allows it.
+        try
+        {
+            await OffStoreService.CaptureLeavingAsync(player).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            player.Logger.LogError(ex, "MuCustom: could not check the offline store of {Player}.", player.Name);
+        }
+    }
+
     /// <inheritdoc />
     public async ValueTask PlayerStateChangedAsync(Player player, State previousState, State currentState)
     {

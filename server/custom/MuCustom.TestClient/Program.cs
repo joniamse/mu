@@ -116,6 +116,11 @@ foreach (var command in options.Commands)
             await connection.SendPlayerShopItemBuyRequestAsync(playerId, parts[1], byte.Parse(parts[2]));
         }
     }
+    else if (command == "!salir")
+    {
+        // Back to the character selection, like the game menu does.
+        await connection.SendLogOutAsync(LogOutType.BackToCharacterSelection);
+    }
     else if (command.StartsWith("!elegir ", StringComparison.Ordinal))
     {
         // From the character selection (e.g. after a logout): asks for the list and enters with that character.

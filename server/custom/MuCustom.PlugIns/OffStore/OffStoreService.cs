@@ -1,8 +1,10 @@
 namespace MuCustom.PlugIns.OffStore;
 
 using System.Runtime.CompilerServices;
+using MuCustom.PlugIns.Data;
 using MuCustom.PlugIns.Vip;
 using MUnique.OpenMU.GameLogic;
+using MUnique.OpenMU.GameLogic.Offline;
 using MUnique.OpenMU.GameLogic.PlayerActions.PlayerStore;
 
 /// <summary>
@@ -19,6 +21,7 @@ public static class OffStoreService
 {
     private static readonly OpenStoreAction OpenStoreAction = new();
     private static readonly ConditionalWeakTable<Player, HashSet<string>> LockedCharacters = new();
+    private static readonly ConditionalWeakTable<Player, PendingStore> PendingStores = new();
 
     /// <summary>
     /// Turns the player's open store into an offline store and disconnects the player.
@@ -183,6 +186,86 @@ public static class OffStoreService
         return locked || storeIsOpen;
     }
 
+    /// <summary>
+    /// Remembers, while the player leaves the world with an open personal store, what's needed to
+    /// keep the store open offline. The store starts when the player's data has been saved:
+    /// see <see cref="StartPendingAsync"/>.
+    /// </summary>
+    /// <param name="player">The player who leaves the world.</param>
+    /// <returns>The task.</returns>
+    public static async ValueTask CaptureLeavingAsync(Player player)
+    {
+        PendingStores.Remove(player);
+        if (player is OfflinePlayer
+            || player.SelectedCharacter is not { } character
+            || player.Account?.LoginName is not { } loginName
+            || player.ShopStorage is not { StoreOpen: true } shop
+            || !shop.Items.Any()
+            || string.IsNullOrWhiteSpace(character.StoreName)
+            || player.CurrentMiniGame is not null
+            || !player.IsAtSafezone()
+            || player.GameContext.OfflinePlayerManager.IsActive(loginName))
+        {
+            return;
+        }
+
+        // Read from the database: when disconnecting, the cached membership is already gone.
+        if (!CustomDatabase.IsReady || player.Account is not { } account)
+        {
+            return;
+        }
+
+        var status = await VipRepository.GetStatusAsync(account.GetId(), character.GetId()).ConfigureAwait(false);
+        var level = status.GetEffective(DateTime.UtcNow).Level;
+        if (!level.HasOffStore)
+        {
+            return;
+        }
+
+        var expiresAt = level.OffStore is { } duration ? DateTime.UtcNow + duration : (DateTime?)null;
+        PendingStores.AddOrUpdate(player, new PendingStore(loginName, character.Name, character.StoreName, expiresAt, level.OffStoreWhilePlaying));
+        if (level.OffStoreWhilePlaying)
+        {
+            LockCharacter(player, character.Name);
+        }
+    }
+
+    /// <summary>
+    /// Opens the offline store which was captured when the player left the world.
+    /// </summary>
+    /// <param name="player">The player.</param>
+    /// <param name="disconnected"><c>true</c> when the player closed the game; <c>false</c> when it went back to the character selection.</param>
+    /// <returns>The task.</returns>
+    public static async ValueTask StartPendingAsync(Player player, bool disconnected)
+    {
+        if (!PendingStores.TryGetValue(player, out var pending))
+        {
+            return;
+        }
+
+        PendingStores.Remove(player);
+
+        // Going back to the character selection keeps the account logged in: only Diamante allows playing meanwhile.
+        if (!disconnected && !pending.StaysOnLogin)
+        {
+            return;
+        }
+
+        var manager = player.GameContext.OfflinePlayerManager;
+        if (!await manager.StartAsync(player.GameContext, pending.LoginName, pending.CharacterName, context => new OfflineShopPlayer(context, pending.ExpiresAtUtc, pending.StaysOnLogin)).ConfigureAwait(false))
+        {
+            player.Logger.LogWarning("MuCustom: the offline store of {Character} could not be started.", pending.CharacterName);
+            return;
+        }
+
+        if (manager.TryGetPlayer(pending.LoginName, out var offlinePlayer) && offlinePlayer is { ShopStorage.StoreOpen: false })
+        {
+            await OpenStoreAction.OpenStoreAsync(offlinePlayer, pending.StoreName).ConfigureAwait(false);
+        }
+
+        player.Logger.LogInformation("MuCustom: the store of {Character} stays open offline.", pending.CharacterName);
+    }
+
     private static void LockCharacter(Player player, string characterName)
     {
         var names = LockedCharacters.GetValue(player, _ => new HashSet<string>(StringComparer.Ordinal));
@@ -192,3 +275,13 @@ public static class OffStoreService
         }
     }
 }
+
+/// <summary>
+/// An open personal store whose character left the world, waiting to stay open offline.
+/// </summary>
+/// <param name="LoginName">The account login name.</param>
+/// <param name="CharacterName">The character name.</param>
+/// <param name="StoreName">The name of the store.</param>
+/// <param name="ExpiresAtUtc">When the store closes; <c>null</c> for never.</param>
+/// <param name="StaysOnLogin">If the store stays open while the account plays another character.</param>
+internal sealed record PendingStore(string LoginName, string CharacterName, string StoreName, DateTime? ExpiresAtUtc, bool StaysOnLogin);

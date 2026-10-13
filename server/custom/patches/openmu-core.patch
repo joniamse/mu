@@ -110,7 +110,7 @@ index d983608f3..3407bcb98 100644
      /// Gets actions queued from outside the AI tick (e.g. skill learning on level-up), which the
      /// <see cref="OfflinePlayerMuHelper"/> drains at the start of each tick. This serializes such
 diff --git a/src/GameLogic/Offline/OfflinePlayerManager.cs b/src/GameLogic/Offline/OfflinePlayerManager.cs
-index c025c2c87..a6364e28c 100644
+index c025c2c87..b5e53d135 100644
 --- a/src/GameLogic/Offline/OfflinePlayerManager.cs
 +++ b/src/GameLogic/Offline/OfflinePlayerManager.cs
 @@ -28,7 +28,24 @@ public sealed class OfflinePlayerManager
@@ -157,7 +157,7 @@ index c025c2c87..a6364e28c 100644
          {
              await this.RemoveAndDisposeAsync(loginName, sentinel).ConfigureAwait(false);
              return false;
-@@ -54,7 +71,15 @@ public sealed class OfflinePlayerManager
+@@ -54,8 +71,52 @@ public sealed class OfflinePlayerManager
  
          try
          {
@@ -171,9 +171,99 @@ index c025c2c87..a6364e28c 100644
 +            {
 +                await this.TransitionToOfflineAsync(realPlayer).ConfigureAwait(false);
 +            }
++
++            if (!await sentinel.InitializeAsync(loginName, characterName).ConfigureAwait(false))
++            {
++                await this.RemoveAndDisposeAsync(loginName, sentinel).ConfigureAwait(false);
++                return false;
++            }
++
++            return true;
++        }
++        catch
++        {
++            await this.RemoveAndDisposeAsync(loginName, sentinel).ConfigureAwait(false);
++            throw;
++        }
++    }
++
++    /// <summary>
++    /// Starts an offline player session for a character whose player already left the game,
++    /// e.g. when a player closes the game with an open personal store.
++    /// Call it after the player's progress has been saved, so the offline player loads the current state.
++    /// </summary>
++    /// <param name="gameContext">The game context.</param>
++    /// <param name="loginName">The account login name.</param>
++    /// <param name="characterName">The name of the character.</param>
++    /// <param name="offlinePlayerFactory">The factory which creates the offline player.</param>
++    /// <returns><c>true</c> if the offline session was started successfully.</returns>
++    public async ValueTask<bool> StartAsync(IGameContext gameContext, string loginName, string characterName, Func<IGameContext, OfflinePlayer> offlinePlayerFactory)
++    {
++        var sentinel = offlinePlayerFactory(gameContext);
++        if (!this._activePlayers.TryAdd(loginName, sentinel))
++        {
++            await sentinel.DisposeAsync().ConfigureAwait(false);
++            return false;
++        }
  
++        try
++        {
              if (!await sentinel.InitializeAsync(loginName, characterName).ConfigureAwait(false))
              {
+                 await this.RemoveAndDisposeAsync(loginName, sentinel).ConfigureAwait(false);
+diff --git a/src/GameLogic/Player.cs b/src/GameLogic/Player.cs
+index d0f1b6e8a..cca41ca4e 100644
+--- a/src/GameLogic/Player.cs
++++ b/src/GameLogic/Player.cs
+@@ -1318,6 +1318,19 @@ public class Player : AsyncDisposable, IBucketMapObserver, IAttackable, IAttacke
+     /// </summary>
+     public async ValueTask RemoveFromGameAsync()
+     {
++        if (this.SelectedCharacter is not null
++            && this.GameContext.PlugInManager.GetPlugInPoint<IPlayerLeavingWorldPlugIn>() is { } leavingPlugIn)
++        {
++            try
++            {
++                await leavingPlugIn.PlayerLeavingWorldAsync(this).ConfigureAwait(false);
++            }
++            catch (Exception ex)
++            {
++                this.Logger.LogError(ex, "Error in a plugin when player {Player} is leaving the world.", this);
++            }
++        }
++
+         if (this.Party is { } party)
+         {
+             await party.LeaveTemporarilyAsync(this).ConfigureAwait(false);
+@@ -1343,14 +1356,27 @@ public class Player : AsyncDisposable, IBucketMapObserver, IAttackable, IAttacke
+ 
+         await this.MagicEffectList.ClearAllEffectsAsync().ConfigureAwait(false);
+ 
++        var saved = false;
+         try
+         {
+-            await this.SaveProgressAsync().ConfigureAwait(false);
++            saved = await this.SaveProgressAsync().ConfigureAwait(false);
+         }
+         catch (Exception ex)
+         {
+             this.Logger.LogError(ex, "Couldn't save when leaving the game. Player: {player}", this);
+         }
++
++        if (saved && this.GameContext.PlugInManager.GetPlugInPoint<IPlayerLeftWorldPlugIn>() is { } leftPlugIn)
++        {
++            try
++            {
++                await leftPlugIn.PlayerLeftWorldAsync(this).ConfigureAwait(false);
++            }
++            catch (Exception ex)
++            {
++                this.Logger.LogError(ex, "Error in a plugin after player {Player} left the world.", this);
++            }
++        }
+     }
+ 
+     /// <summary>
 diff --git a/src/GameLogic/PlayerActions/Character/SelectCharacterAction.cs b/src/GameLogic/PlayerActions/Character/SelectCharacterAction.cs
 index 42a326249..5d2bb7204 100644
 --- a/src/GameLogic/PlayerActions/Character/SelectCharacterAction.cs
@@ -490,6 +580,68 @@ index 000000000..0248d5e0b
 +/// <param name="Definition">The definition of the item.</param>
 +/// <param name="Level">The level of the item before the crafting.</param>
 +public sealed record CraftingInputItem(Item Item, ItemDefinition? Definition, byte Level);
+diff --git a/src/GameLogic/PlugIns/IPlayerLeavingWorldPlugIn.cs b/src/GameLogic/PlugIns/IPlayerLeavingWorldPlugIn.cs
+new file mode 100644
+index 000000000..396b7a15f
+--- /dev/null
++++ b/src/GameLogic/PlugIns/IPlayerLeavingWorldPlugIn.cs
+@@ -0,0 +1,23 @@
++// <copyright file="IPlayerLeavingWorldPlugIn.cs" company="MUnique">
++// Licensed under the MIT License. See LICENSE file in the project root for full license information.
++// </copyright>
++
++namespace MUnique.OpenMU.GameLogic.PlugIns;
++
++using System.Runtime.InteropServices;
++using MUnique.OpenMU.PlugIns;
++
++/// <summary>
++/// A plugin interface which is called when a player is about to leave the world (logout, going
++/// back to the character selection or disconnection), while its character is still selected.
++/// </summary>
++[Guid("4E7A2C91-3B58-4D06-A1F4-8C2D9E5B7A63")]
++[PlugInPoint("Player leaving world", "Plugins which are called when a player is about to leave the world, while its character is still selected.")]
++public interface IPlayerLeavingWorldPlugIn
++{
++    /// <summary>
++    /// Is called when the player is about to leave the world.
++    /// </summary>
++    /// <param name="player">The player.</param>
++    ValueTask PlayerLeavingWorldAsync(Player player);
++}
+diff --git a/src/GameLogic/PlugIns/IPlayerLeftWorldPlugIn.cs b/src/GameLogic/PlugIns/IPlayerLeftWorldPlugIn.cs
+new file mode 100644
+index 000000000..38629f644
+--- /dev/null
++++ b/src/GameLogic/PlugIns/IPlayerLeftWorldPlugIn.cs
+@@ -0,0 +1,27 @@
++// <copyright file="IPlayerLeftWorldPlugIn.cs" company="MUnique">
++// Licensed under the MIT License. See LICENSE file in the project root for full license information.
++// </copyright>
++
++namespace MUnique.OpenMU.GameLogic.PlugIns;
++
++using System.Runtime.InteropServices;
++using MUnique.OpenMU.PlugIns;
++
++/// <summary>
++/// A plugin interface which is called when a player left the world (logout, going back to the
++/// character selection or disconnection) and its progress has been saved successfully.
++/// </summary>
++/// <remarks>
++/// It's called before the account is logged off at the login server, so nobody can log in with
++/// the account until the plugins are done.
++/// </remarks>
++[Guid("9A3E6B27-C5D1-4F80-B2A9-6E0F3D8C1B54")]
++[PlugInPoint("Player left world", "Plugins which are called when a player left the world and its progress has been saved.")]
++public interface IPlayerLeftWorldPlugIn
++{
++    /// <summary>
++    /// Is called when the player left the world and its progress has been saved.
++    /// </summary>
++    /// <param name="player">The player.</param>
++    ValueTask PlayerLeftWorldAsync(Player player);
++}
 diff --git a/src/Persistence/EntityFramework/ItemStorageRepository.cs b/src/Persistence/EntityFramework/ItemStorageRepository.cs
 new file mode 100644
 index 000000000..44566115a

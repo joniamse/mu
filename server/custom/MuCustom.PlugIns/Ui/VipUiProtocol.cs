@@ -1,8 +1,9 @@
-namespace MuCustom.PlugIns.Ui;
+﻿namespace MuCustom.PlugIns.Ui;
 
 using System.Globalization;
 using MuCustom.PlugIns.Common;
 using MuCustom.PlugIns.Data;
+using MuCustom.PlugIns.OffStore;
 using MuCustom.PlugIns.Vip;
 using MUnique.OpenMU.GameLogic;
 using MUnique.OpenMU.GameLogic.Views;
@@ -21,6 +22,7 @@ using MUnique.OpenMU.Interfaces;
 /// <item><c>#MUVIP|L|level|name|cost|scope|exp%|drop%|chaos|vaults|offstoreHours|whilePlaying|helper%|entries</c>: a level; offstoreHours is -1 for unlimited, 0 for none.</item>
 /// <item><c>#MUVIP|P|id|name|priceUsd|base|bonus|total</c>: a recharge package.</item>
 /// <item><c>#MUVIP|T|character|store|expiresUnix|soldItems|soldZen</c>: an open offline store; expiresUnix is -1 for unlimited.</item>
+/// <item><c>#MUVIP|O|text</c>: without an open offline store, a line about the store open right now or the last closed one.</item>
 /// <item><c>#MUVIP|M|text</c>: a notice for the window, e.g. the result of a purchase.</item>
 /// <item><c>#MUVIP|E</c>: end, the client shows the window.</item>
 /// </list>
@@ -79,10 +81,19 @@ public static class VipUiProtocol
             await SendLineAsync(player, Join("P", package.Id, Clean(package.Name), package.PriceUsd.ToString("0.00", CultureInfo.InvariantCulture), package.BaseFichas, package.BonusFichas, package.TotalFichas)).ConfigureAwait(false);
         }
 
-        foreach (var store in await OffStoreRepository.GetByAccountAsync(account.GetId()).ConfigureAwait(false))
+        var stores = await OffStoreRepository.GetByAccountAsync(account.GetId()).ConfigureAwait(false);
+        foreach (var store in stores)
         {
             var storeExpires = store.ExpiresAt is { } se ? new DateTimeOffset(se, TimeSpan.Zero).ToUnixTimeSeconds() : -1;
             await SendLineAsync(player, Join("T", Clean(store.CharacterName), Clean(store.StoreName), storeExpires, store.SoldItems, store.SoldZen)).ConfigureAwait(false);
+        }
+
+        if (stores.Count == 0)
+        {
+            foreach (var line in await OffStoreService.DescribeStoreHelpAsync(player).ConfigureAwait(false))
+            {
+                await SendLineAsync(player, Join("O", Clean(line))).ConfigureAwait(false);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(notice))

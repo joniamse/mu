@@ -157,6 +157,33 @@ public static class OffStoreRepository
         return result.OrderBy(r => r.ClosedAt).ToList();
     }
 
+    /// <summary>
+    /// Gets the last closed store of an account, notified or not.
+    /// </summary>
+    /// <param name="accountId">The account identifier.</param>
+    /// <returns>The store, or <c>null</c> if the account never had one.</returns>
+    public static async ValueTask<OffStoreReport?> GetLastClosedAsync(Guid accountId)
+    {
+        await using var connection = await CustomDatabase.OpenAsync().ConfigureAwait(false);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT id, character_name, started_at, closed_at, reason, sold_items, sold_zen
+              FROM offline_store_history
+             WHERE account_id = @a
+             ORDER BY closed_at DESC
+             LIMIT 1;
+            """,
+            connection);
+        command.Parameters.AddWithValue("a", accountId);
+        await using var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        if (!await reader.ReadAsync().ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return new OffStoreReport(reader.GetInt64(0), reader.GetString(1), reader.GetDateTime(2), reader.GetDateTime(3), reader.GetString(4), reader.GetInt32(5), reader.GetInt64(6));
+    }
+
     private static async ValueTask<IReadOnlyList<OffStoreRecord>> QueryAsync(string sql, object parameter)
     {
         await using var connection = await CustomDatabase.OpenAsync().ConfigureAwait(false);

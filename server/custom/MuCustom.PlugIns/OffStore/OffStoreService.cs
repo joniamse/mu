@@ -414,6 +414,54 @@ public static class OffStoreService
     }
 
     /// <summary>
+    /// Describes the store of a player who has no open offline store: the shop it has open right now
+    /// (what happens to it when it leaves) and the last offline store of the account (when and why it
+    /// closed).
+    /// </summary>
+    /// <param name="player">The player.</param>
+    /// <returns>Short lines, without the <c>[Tienda]</c> prefix.</returns>
+    public static async ValueTask<IReadOnlyList<string>> DescribeStoreHelpAsync(Player player)
+    {
+        var lines = new List<string>();
+        var level = VipService.GetLevel(player);
+        if (player.ShopStorage is { StoreOpen: true })
+        {
+            lines.Add(level.HasOffStore
+                ? $"Tu tienda esta abierta en linea. Si sales del juego con ella abierta, queda offline {DescribeDuration(level.OffStore)}."
+                : "Tu tienda esta abierta en linea; se cierra al salir (la tienda offline es un beneficio VIP, /vip).");
+            if (level.HasOffStore && !level.OffStoreWhilePlaying)
+            {
+                lines.Add("La tienda offline se cierra cuando vuelves a entrar con la cuenta (con Diamante sigue abierta mientras juegas).");
+            }
+        }
+
+        if (player.Account is { } account && CustomDatabase.IsReady
+            && await OffStoreRepository.GetLastClosedAsync(account.GetId()).ConfigureAwait(false) is { } last)
+        {
+            var open = last.ClosedAt - last.StartedAt;
+            lines.Add($"Tu ultima tienda offline ({last.CharacterName}) se cerro hace {DescribeAgo(last.ClosedAt)}: {last.Reason}, tras {(int)open.TotalHours}h {open.Minutes:00}m. Vendiste {last.SoldItems} item(s) por {last.SoldZen:N0} zen.");
+        }
+
+        return lines;
+    }
+
+    /// <summary>
+    /// Describes how long ago something happened, e.g. <c>3h 05m</c>.
+    /// </summary>
+    /// <param name="when">When, in UTC.</param>
+    /// <returns>The text.</returns>
+    public static string DescribeAgo(DateTime when)
+    {
+        var ago = DateTime.UtcNow - DateTime.SpecifyKind(when, DateTimeKind.Utc);
+        if (ago.TotalDays >= 1)
+        {
+            return $"{(int)ago.TotalDays}d {ago.Hours}h";
+        }
+
+        return ago.TotalHours >= 1 ? $"{(int)ago.TotalHours}h {ago.Minutes:00}m" : $"{Math.Max(1, (int)ago.TotalMinutes)}m";
+    }
+
+    /// <summary>
     /// Describes how long a store stays open.
     /// </summary>
     /// <param name="duration">The duration; <c>null</c> for unlimited.</param>

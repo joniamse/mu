@@ -43,7 +43,14 @@ public class StoreStatusChatCommandPlugIn : IChatCommandPlugIn
                 : "La tienda offline es un beneficio VIP (/vip): con Plata 12 h, con Oro 24 h, con Platino y Diamante sin limite.";
             if (lines.Count == 0)
             {
-                await player.ShowBlueMessageAsync($"[Tienda] No tienes tiendas offline abiertas. {help}").ConfigureAwait(false);
+                var details = await OffStoreService.DescribeStoreHelpAsync(player).ConfigureAwait(false);
+                await player.ShowBlueMessageAsync(player.ShopStorage is { StoreOpen: true }
+                    ? "[Tienda] No tienes tiendas offline abiertas."
+                    : $"[Tienda] No tienes tiendas offline abiertas. {help}").ConfigureAwait(false);
+                foreach (var detail in details)
+                {
+                    await player.ShowBlueMessageAsync($"[Tienda] {detail}").ConfigureAwait(false);
+                }
             }
         });
     }

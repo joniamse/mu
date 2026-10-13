@@ -253,3 +253,22 @@ pip install -r tools\requirements.txt
 
 - [ ] Clic en el cartel de la tienda de otro jugador (se ilumina al pasar el mouse): se abre la tienda.
 - [ ] Con tu tienda abierta no podés moverte: el chat muestra "Con la tienda personal abierta no puedes moverte...".
+
+## 11. Tienda offline: persistencia, tiempo restante y seguridad
+
+- [ ] Con la tienda offline abierta, `/tienda` (o la ventana VIP) muestra "quedan Xh Ym" y lo vendido. Con Diamante se ve jugando con otro personaje.
+- [ ] Al llegar a 0 la tienda se cierra sola (revisión cada 15 s). Al entrar, el dueño ve: "La tienda offline de X se cerro (se termino el tiempo) tras ... Vendiste N item(s) por Z zen."
+- [ ] Reiniciar el servidor (`.\server\up.cmd build` o `docker restart openmu-startup`): las tiendas vuelven a aparecer. El tiempo apagado cuenta (vencimiento absoluto).
+- [ ] Simular una caída: `docker kill openmu-startup` y `docker start openmu-startup`: también se restauran, sin los items ya vendidos.
+- [ ] No se restaura si venció el tiempo o la membresía, o si la cuenta ya está conectada.
+- [ ] Tienda en el Server 0 y entrar con la misma cuenta en el Server 1: la tienda se cierra (salvo Diamante). Elegir el personaje de una tienda abierta (en cualquier servidor) la cierra y desconecta una vez.
+
+```sql
+SELECT character_name, store_name, server_id, expires_at, sold_items, sold_zen FROM offline_stores;
+SELECT character_name, reason, sold_items, sold_zen, closed_at FROM offline_store_history ORDER BY id DESC LIMIT 10;
+UPDATE offline_stores SET expires_at = now() + interval '60 seconds';   -- vencimiento rapido (con un reinicio)
+```
+
+Por qué no hay duplicación: OpenMU graba el item vendido en el momento de la venta, el plugin guarda
+vendedor y comprador enseguida, la tienda se carga desde la base después de guardar al jugador y un
+personaje con tienda abierta no puede usarse en ningún servidor.

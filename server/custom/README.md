@@ -33,6 +33,8 @@ Conexión: la misma que OpenMU (`DB_HOST`, `DB_ADMIN_USER`, `DB_ADMIN_PW`), o
 | `account_vip_status` | VIP Diamante (de cuenta). |
 | `character_vip_status` | VIP Plata, Oro y Platino (de personaje). |
 | `account_vaults`, `account_vault_state` | Qué item storage de OpenMU es cada baúl (`/baul`). |
+| `offline_stores` | Tiendas offline abiertas (servidor, vencimiento absoluto, ventas): se restauran tras un reinicio o una caída. |
+| `offline_store_history` | Tiendas cerradas con motivo y ventas; el dueño ve el resumen al entrar. |
 | `vip_event_entry_claims` | Entradas diarias VIP a Blood Castle / Devil Square ya entregadas. |
 | `openmu_quests` | Misiones diarias (editables: activar, cambiar objetivos o recompensas). |
 | `openmu_quest_progress` | Progreso por personaje y día (UTC); `claimed_at` impide cobrar dos veces. |
@@ -46,6 +48,7 @@ Conexión: la misma que OpenMU (`DB_HOST`, `DB_ADMIN_USER`, `DB_ADMIN_PW`), o
 | `ICharacterSelectingPlugIn` en `SelectCharacterAction` | Proteger el personaje de una tienda offline abierta. |
 | `OfflinePlayerManager.StartAsync` con fábrica y `OfflinePlayer.StaysOnLogin` | Tienda offline sobre las sesiones offline de OpenMU; con Diamante sigue abierta al entrar con otro personaje. |
 | `ItemStorageRepository` | Cargar un baúl (item storage) con sus items, para cambiar de baúl en el juego. |
+| `IPlayerLeavingWorldPlugIn`, `IPlayerLeftWorldPlugIn`, `OfflinePlayerManager.StartAsync` sin jugador | Tienda offline automática al salir del juego, creada después de guardar y antes de liberar la cuenta. |
 | `Startup`: referencia y `EnsureLoaded()` | Cargar los plugins. |
 
 Para tocar el núcleo: `.\server\custom\patch.ps1 apply`, editar en `server/OpenMU/src`, compilar y

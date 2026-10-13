@@ -64,7 +64,7 @@ public class PlayerLifecyclePlugIn : IPlayerStateChangedPlugIn, ICharacterSelect
             if (currentState == PlayerState.CharacterSelection)
             {
                 // The account is assigned after the login state change, so this is the first state which has it.
-                OffStoreService.OnCharacterSelection(player);
+                await OffStoreService.OnCharacterSelectionAsync(player).ConfigureAwait(false);
             }
             else if (currentState == PlayerState.EnteredWorld && previousState == PlayerState.CharacterSelection)
             {
@@ -114,6 +114,7 @@ public class PlayerLifecyclePlugIn : IPlayerStateChangedPlugIn, ICharacterSelect
         await CashRepository.EnsureAccountAsync(account.GetId()).ConfigureAwait(false);
         await VipService.RefreshAsync(player).ConfigureAwait(false);
         await DailyQuestService.LoadAsync(player).ConfigureAwait(false);
+        await OffStoreService.ShowStoreStatusAsync(player).ConfigureAwait(false);
 
         if (!MuCustomSettings.Current.ShowVipStatusOnEnter)
         {

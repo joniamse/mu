@@ -24,9 +24,11 @@ public class MuCustomCorePlugIn : IPeriodicTaskPlugIn, ISupportCustomConfigurati
 {
     private static readonly TimeSpan QuestFlushInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan VipRefreshInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan OffStoreCheckInterval = TimeSpan.FromSeconds(15);
 
     private DateTime _nextQuestFlushUtc = DateTime.MinValue;
     private DateTime _nextVipRefreshUtc = DateTime.MinValue;
+    private DateTime _nextOffStoreCheckUtc = DateTime.MinValue;
     private MuCustomSettings? _configuration;
 
     /// <inheritdoc />
@@ -46,12 +48,15 @@ public class MuCustomCorePlugIn : IPeriodicTaskPlugIn, ISupportCustomConfigurati
     /// <inheritdoc />
     public async ValueTask ExecuteTaskAsync(GameContext gameContext)
     {
-        Announcer.Register(gameContext);
+        GameServers.Register(gameContext);
         var logger = gameContext.LoggerFactory.CreateLogger<MuCustomCorePlugIn>();
         if (!await CustomDatabase.EnsureMigratedAsync(logger).ConfigureAwait(false))
         {
             return;
         }
+
+        // After a restart or a crash: the offline stores of this game server open again.
+        await OffStoreService.RestoreAsync(gameContext, logger).ConfigureAwait(false);
 
         var now = DateTime.UtcNow;
         if (now >= this._nextQuestFlushUtc)
@@ -65,6 +70,11 @@ public class MuCustomCorePlugIn : IPeriodicTaskPlugIn, ISupportCustomConfigurati
         {
             this._nextVipRefreshUtc = now + VipRefreshInterval;
             await this.RefreshOnlinePlayersAsync(gameContext, logger).ConfigureAwait(false);
+        }
+
+        if (now >= this._nextOffStoreCheckUtc)
+        {
+            this._nextOffStoreCheckUtc = now + OffStoreCheckInterval;
             await OffStoreService.CloseExpiredAsync(gameContext).ConfigureAwait(false);
         }
     }
@@ -74,6 +84,7 @@ public class MuCustomCorePlugIn : IPeriodicTaskPlugIn, ISupportCustomConfigurati
     {
         this._nextQuestFlushUtc = DateTime.MinValue;
         this._nextVipRefreshUtc = DateTime.MinValue;
+        this._nextOffStoreCheckUtc = DateTime.MinValue;
     }
 
     private async ValueTask RefreshOnlinePlayersAsync(GameContext gameContext, ILogger logger)

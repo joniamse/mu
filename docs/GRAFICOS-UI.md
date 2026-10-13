@@ -16,13 +16,50 @@ Las texturas HD con IA quedan solo para **modelos 3D** (armas, armaduras, mapas)
 
 ## Estado
 
-- [x] **Prueba de concepto:** panel de vitales (nombre, nivel, HP/MP/SD/AG) funcionando en el juego, nítido y escalable
-- [ ] Ocultar las esferas de HP/MP de la HUD vieja cuando la nueva está activa
-- [ ] Input: mouse y teclado hacia RmlUi (botones, ventanas que se pueden arrastrar)
-- [ ] Carga de imágenes PNG (íconos, marcos) en `LoadTexture`
-- [ ] Opción `[UI] ModernHud=1` en `config.ini`
-- [ ] Migrar: barra de skills → minimapa → inventario → personaje → tienda NPC → chat → resto
-- [ ] Definir el lenguaje visual (paleta, tipografía, marcos) en un único `.rcss` base
+- [x] Ventana de estado moderna (estilo L2): nivel, nombre, SD/HP/MP/AG, pulso con HP bajo, modo compacto
+- [x] Estilo base compartido (`theme.rcss`), tooltips, input (mouse; teclado en campos de texto), imágenes PNG
+- [x] Barra de skills: skill actual + 10 teclas, selector (Ctrl+1..0 asigna), cooldown, tooltip moderno
+- [x] Dock de menú (personaje, inventario, amigos, menú, opciones modernas, tienda) y barra de experiencia
+- [x] Las piezas viejas reemplazadas se ocultan; la UI clásica sigue intacta con la opción apagada
+- [x] **Ventana "Modern settings"** con un interruptor por cada modernización (ver abajo)
+- [ ] Pociones Q/W/E/R (la HUD vieja las dibuja como modelos 3D)
+- [ ] Minimapa → inventario → personaje → tienda NPC → chat → resto
+
+## Opciones modernas (todas desactivables)
+
+Se abren desde **Opciones → "Modern settings..."** (última fila) o desde el engranaje del dock. La ventana
+funciona también con la interfaz clásica. Cada cambio se guarda en `config.ini` al instante.
+
+| Opción | Clave | Por defecto | Efecto |
+|---|---|---|---|
+| HD interface | `[UI] ModernHud` | Sí | HUD moderna; se aplica en el momento |
+| WASD movement | `[Modern] WasdMovement` | No | Caminar con W/A/S/D (relativo a la cámara). Poción W, árbol master (A), comandos (D) y tienda personal (S) pasan a **Shift + tecla**. No mueve mientras se escribe ni con Ctrl/Shift |
+| Enhanced textures | `[Modern] EnhancedTextures` | Sí | Mipmaps + filtrado trilineal + anisotrópico x8 en texturas del mundo; **requiere reiniciar** el juego |
+
+### Notas técnicas de las mejoras
+
+- **WASD** (`Input/KeyboardMovement.cpp`): convierte la dirección de pantalla en un ángulo con la misma
+  fórmula que usa el mouse (`g_Camera.Angle[2]`), planifica 2 casillas adelante con `PathFinding2` y manda
+  el mismo paquete de caminata que un clic. Replanifica por casilla y frena al soltar.
+- **Texturas** (`Render/Textures/MipChain.cpp`, `Render/Sprites/GlobalBitmap.cpp`): la cadena de mipmaps se
+  arma en la CPU (color ponderado por alfa, alfa = máximo para que el follaje recortado no desaparezca a
+  distancia). Las texturas de `Interface\` no se tocan. Los samplers se comparten por estado (antes: uno
+  por textura, cf. issue #620 de MuMain).
+- **Trampa encontrada:** en Direct3D 12, activar anisotropía en samplers con ampliación *nearest* hacía
+  fallar la creación de texturas posteriores (`CursorID.tga`). Por eso la anisotropía solo se activa en
+  texturas con filtro lineal. En Vulkan no fallaba.
+
+## Sombras (pendiente, analizado)
+
+Las sombras de personajes y objetos son **proyecciones planas** (`BMD::RenderBodyShadow`): cada malla se
+aplasta contra el terreno y se dibuja en negro con opacidad 1. Las mallas superpuestas acumulan oscuridad,
+de ahí las manchas negras duras.
+
+Para sombras suaves y uniformes hace falta que cada píxel se oscurezca **una sola vez** → **stencil buffer**.
+El renderer SDL GPU hoy no tiene stencil (profundidad `D32_FLOAT`, las llamadas de stencil son no-op).
+Plan: depth `D24_UNORM_S8_UINT`/`D32_FLOAT_S8_UINT`, variantes de pipeline con stencil, sombra con
+opacidad ~0.45 y stencil "dibujar si es 0, luego incrementar". Opción `[Modern] SoftShadows`.
+Más adelante: shadow mapping real.
 
 ## Cómo está hecho (MuMain, rama `feature/rmlui-hud`)
 

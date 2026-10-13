@@ -28,9 +28,15 @@ Prioridad del usuario: UI moderna y escalable, y después gráficos (shaders, te
 - [x] Decisión: UI nueva desde cero con RmlUi, migrada ventana por ventana
 - [x] Prueba de concepto: panel de vitales con RmlUi funcionando en el juego
 - [x] Fork de MuMain en GitHub ([joniamse/MuMain](https://github.com/joniamse/MuMain)) y push de la rama `feature/rmlui-hud`
-- [ ] Base de la UI nueva: input, imágenes PNG, ocultar partes viejas, estilo base
-- [ ] Migración de ventanas (HUD completa, minimapa, inventario, personaje, ...)
-- [ ] Ajustes rápidos de render: anisotrópico, MSAA, mipmaps
+- [x] Base de la UI nueva: input, imágenes PNG, ocultar partes viejas, estilo base
+- [x] HUD moderna: estado, skills, dock de menú, experiencia
+- [x] Ventana "Modern settings" con interruptores para cada mejora
+- [x] Movimiento WASD (opcional)
+- [x] Texturas mejoradas: mipmaps + trilineal + anisotrópico (opcional)
+- [ ] Pociones Q/W/E/R en la HUD moderna
+- [ ] Sombras suaves (requiere stencil en el renderer, ver GRAFICOS-UI.md)
+- [ ] Migración de ventanas (minimapa, inventario, personaje, ...)
+- [ ] MSAA
 - [ ] Post-procesado: bloom, color grading, SSAO, FXAA/SMAA
 - [ ] Iluminación: normal maps y specular, sombras
 - [ ] Texturas HD de modelos 3D: conversión + Real-ESRGAN, priorizando mapas → armas → armaduras

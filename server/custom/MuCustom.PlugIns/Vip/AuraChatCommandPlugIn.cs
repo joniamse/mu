@@ -9,7 +9,7 @@ using MUnique.OpenMU.GameLogic.PlugIns.ChatCommands;
 using MUnique.OpenMU.PlugIns;
 
 /// <summary>
-/// <c>/aura 0-4</c>: shows the aura of another VIP level on the character, to try the looks;
+/// <c>/aura 0-5</c>: shows the aura of another VIP level on the character, to try the looks;
 /// <c>/aura</c> alone shows the real one again. Only while the test mode is on
 /// (<see cref="MuCustomSettings.SimulatedRechargeEnabled"/>).
 /// </summary>
@@ -42,18 +42,18 @@ public class AuraChatCommandPlugIn : IChatCommandPlugIn
             if (argument.Length == 0)
             {
                 await AuraService.PreviewAsync(player, null).ConfigureAwait(false);
-                await player.ShowBlueMessageAsync("[VIP] Aura: la de tu membresia. Prueba otras con /aura 1 (Plata) a /aura 4 (Diamante).").ConfigureAwait(false);
+                await player.ShowBlueMessageAsync("[VIP] Aura: la de tu membresia. Prueba otras con /aura 1 (Plata) a /aura 4 (Diamante), o /aura 5 (Top PvP).").ConfigureAwait(false);
                 return;
             }
 
-            if (!int.TryParse(argument, out var level) || level < 0 || level >= VipLevels.All.Count)
+            if (!int.TryParse(argument, out var level) || level < 0 || level > AuraService.TopPvpLevel)
             {
-                await player.ShowBlueMessageAsync("[VIP] Uso: /aura 0-4 (0 sin aura, 1 Plata, 2 Oro, 3 Platino, 4 Diamante)").ConfigureAwait(false);
+                await player.ShowBlueMessageAsync("[VIP] Uso: /aura 0-5 (0 sin aura, 1 Plata, 2 Oro, 3 Platino, 4 Diamante, 5 Top PvP)").ConfigureAwait(false);
                 return;
             }
 
             await AuraService.PreviewAsync(player, level).ConfigureAwait(false);
-            var name = level == 0 ? "ninguna" : VipLevels.All[level].Name;
+            var name = level switch { 0 => "ninguna", AuraService.TopPvpLevel => "Top PvP", _ => VipLevels.All[level].Name };
             await player.ShowBlueMessageAsync($"[VIP] Aura de prueba: {name}. /aura para volver a la tuya.").ConfigureAwait(false);
         });
     }

@@ -9,10 +9,16 @@ using MUnique.OpenMU.Interfaces;
 /// <summary>
 /// Tells the clients the VIP level of each character in the game server, so they draw its aura
 /// (the client's <c>GameLogic/Vip/VipAura</c>): a notice <c>#MUAURA|name|level</c>, which the
-/// modern client doesn't show. Level 0 is no aura.
+/// modern client doesn't show. Level 0 is no aura; 1 to 4 are the VIP levels, and
+/// <see cref="TopPvpLevel"/> is the aura of the weekly top 1 of the PvP ranking.
 /// </summary>
 public static class AuraService
 {
+    /// <summary>
+    /// The aura of the weekly top 1 of the PvP ranking (not a VIP level).
+    /// </summary>
+    public const int TopPvpLevel = 5;
+
     private const string Prefix = "#MUAURA|";
 
     // The level last sent for each player.
@@ -83,7 +89,7 @@ public static class AuraService
     {
         if (level is { } shown)
         {
-            Previews[player] = Math.Clamp(shown, 0, VipLevels.All.Count - 1);
+            Previews[player] = Math.Clamp(shown, 0, TopPvpLevel);
         }
         else
         {

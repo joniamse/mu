@@ -117,13 +117,16 @@ KENNEY = {
     "star_06": "star_soft",     # rising sparkles (Oro)
     "star_07": "star_sharp",    # rising sparkles (Platino)
     "star_08": "star_burst",    # rising sparkles (Diamante)
-    "star_09": "orb_flare",     # the core of the orbiting lights
     "magic_02": "runes",        # rune circle on the ground (Oro)
     "twirl_02": "vortex",       # spinning vortex on the ground (Platino)
     "twirl_03": "vortex_wide",  # spinning vortex on the ground (Diamante)
     "trace_07": "pillar",       # the column of light (Diamante)
     "spark_06": "bolt",         # the lightning strike (Diamante)
     "light_01": "flash",        # the ground flash of a strike (Diamante)
+    "spark_01": "arc_1",        # electric arcs crackling around the body (Platino, Diamante)
+    "spark_02": "arc_2",
+    "spark_03": "arc_3",
+    "spark_04": "arc_4",
 }
 
 

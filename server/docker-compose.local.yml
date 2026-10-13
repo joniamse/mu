@@ -2,11 +2,12 @@
 # Usar con server/up.cmd. Las rutas relativas se resuelven desde deploy/all-in-one.
 services:
   openmu-startup:
-    # Imagen compilada desde nuestro codigo (server/OpenMU/src), no la de Docker Hub
+    # Imagen compilada desde nuestro codigo, no la de Docker Hub: OpenMU (server/OpenMU/src)
+    # con el parche custom/patches/openmu-core.patch y los plugins custom/MuCustom.PlugIns.
     image: mu/openmu:dev
     build:
-      context: ../../src
-      dockerfile: Startup/Dockerfile
+      context: ../../..
+      dockerfile: custom/Dockerfile
     environment:
       # Para jugar en esta misma PC. Para LAN usar "local"; online, "public" o la IP fija.
       RESOLVE_IP: ${RESOLVE_IP:-loopback}

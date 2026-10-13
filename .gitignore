@@ -11,6 +11,10 @@ backups/
 # Herramientas descargadas / binarios
 tools/*
 !tools/README.md
+# ...salvo nuestras herramientas Python
+!tools/*.py
+!tools/*.json
+!tools/requirements.txt
 
 # Editor / SO
 .vs/
@@ -18,3 +22,11 @@ tools/*
 !.vscode/extensions.json
 Thumbs.db
 desktop.ini
+
+# Compilados de los proyectos .NET propios
+server/custom/**/bin/
+server/custom/**/obj/
+
+# Salidas de las herramientas
+__pycache__/
+*.resx.bak

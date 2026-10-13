@@ -1,0 +1,2 @@
+# El parche del nucleo se guarda byte a byte (sus lineas deben coincidir con las fuentes de OpenMU).
+server/custom/patches/*.patch -text

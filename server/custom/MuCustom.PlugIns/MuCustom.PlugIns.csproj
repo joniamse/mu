@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Our own server features (VIP, fichas, daily quests, announcements) as OpenMU plugins.
+       Referenced by the OpenMU startup project through patches/openmu-core.patch. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MuCustom.PlugIns</RootNamespace>
+    <WarningsAsErrors>nullable;CS4014</WarningsAsErrors>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Data\Migrations\*.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\OpenMU\src\GameLogic\MUnique.OpenMU.GameLogic.csproj" />
+    <ProjectReference Include="..\..\OpenMU\src\Persistence\EntityFramework\MUnique.OpenMU.Persistence.EntityFramework.csproj" />
+  </ItemGroup>
+
+</Project>

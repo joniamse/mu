@@ -1,0 +1,14 @@
+# Contexto del build de custom/Dockerfile (server/). Solo hace falta OpenMU/src y custom/.
+**/.git
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/node_modules
+**/*.*proj.user
+OpenMU/*
+!OpenMU/src
+sql
+backups
+*.cmd
+*.ps1

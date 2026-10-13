@@ -1,0 +1,6 @@
+# Herramientas Python de tools/ (audio_normalizer.py). dialog_formatter.py solo usa la biblioteca estandar.
+numpy>=2.0
+scipy>=1.13
+soundfile>=0.12
+pyloudnorm>=0.1.1
+noisereduce>=3.0

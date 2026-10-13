@@ -1,0 +1,581 @@
+diff --git a/src/GameLogic/DefaultDropGenerator.cs b/src/GameLogic/DefaultDropGenerator.cs
+index 13ee5945b..9b22badaa 100644
+--- a/src/GameLogic/DefaultDropGenerator.cs
++++ b/src/GameLogic/DefaultDropGenerator.cs
+@@ -6,6 +6,7 @@ namespace MUnique.OpenMU.GameLogic;
+ 
+ using MUnique.OpenMU.DataModel.Configuration.Items;
+ using MUnique.OpenMU.GameLogic.Attributes;
++using MUnique.OpenMU.GameLogic.PlugIns;
+ using Nito.AsyncEx;
+ 
+ /// <summary>
+@@ -87,7 +88,8 @@ public class DefaultDropGenerator : IDropGenerator
+         }
+ 
+         uint money = 0;
+-        var (droppedItems, moneyResult) = this.GenerateDrops(monster, gainedExperience);
++        var chanceMultiplier = GetDropChanceMultiplier(player);
++        var (droppedItems, moneyResult) = this.GenerateDrops(monster, gainedExperience, chanceMultiplier);
+         if (moneyResult > 0)
+         {
+             money = moneyResult;
+@@ -270,7 +272,19 @@ public class DefaultDropGenerator : IDropGenerator
+         return itemDefinition.MaximumDropLevel is not { } maxDropLevel || monsterLevel <= maxDropLevel;
+     }
+ 
+-    private (IList<Item>? Items, uint Money) GenerateDrops(MonsterDefinition monster, int gainedExperience)
++    private static double GetDropChanceMultiplier(Player player)
++    {
++        if (player.GameContext.PlugInManager.GetPlugInPoint<IGameplayRateModifierPlugIn>() is not { } plugInPoint)
++        {
++            return 1.0;
++        }
++
++        var args = new GameplayRateArgs(GameplayRateKind.ItemDropChanceMultiplier, 1.0);
++        plugInPoint.ModifyRate(player, args);
++        return args.Value > 0 ? args.Value : 1.0;
++    }
++
++    private (IList<Item>? Items, uint Money) GenerateDrops(MonsterDefinition monster, int gainedExperience, double chanceMultiplier)
+     {
+         uint money = 0;
+         List<Item>? droppedItems = null;
+@@ -310,7 +324,7 @@ public class DefaultDropGenerator : IDropGenerator
+ 
+             for (int i = 0; i < remainingDrops; i++)
+             {
+-                var group = this.SelectRandomGroup(this._chanceDropGroups, totalChance);
++                var group = this.SelectRandomGroup(this._chanceDropGroups, totalChance, chanceMultiplier);
+                 if (group is null)
+                 {
+                     continue;
+@@ -552,9 +566,10 @@ public class DefaultDropGenerator : IDropGenerator
+         };
+     }
+ 
+-    private DropItemGroup? SelectRandomGroup(IEnumerable<DropItemGroup> groups, double totalChance)
++    private DropItemGroup? SelectRandomGroup(IEnumerable<DropItemGroup> groups, double totalChance, double chanceMultiplier = 1.0)
+     {
+-        var remainingThreshold = this._randomizer.NextDouble();
++        // A multiplier above 1 scales up the chance of every group, which is the same as scaling down the threshold.
++        var remainingThreshold = this._randomizer.NextDouble() / chanceMultiplier;
+         if (totalChance > 1.0)
+         {
+             remainingThreshold *= totalChance;
+diff --git a/src/GameLogic/MuHelper/MuHelperZenCostCalculator.cs b/src/GameLogic/MuHelper/MuHelperZenCostCalculator.cs
+index aeb666236..b9dde6341 100644
+--- a/src/GameLogic/MuHelper/MuHelperZenCostCalculator.cs
++++ b/src/GameLogic/MuHelper/MuHelperZenCostCalculator.cs
+@@ -5,6 +5,7 @@
+ namespace MUnique.OpenMU.GameLogic.MuHelper;
+ 
+ using MUnique.OpenMU.GameLogic.Attributes;
++using MUnique.OpenMU.GameLogic.PlugIns;
+ 
+ /// <summary>
+ /// Calculates the Zen cost for the MU Helper and offline player based on the
+@@ -33,6 +34,14 @@ public static class MuHelperZenCostCalculator
+         var costMultiplier = configuration.CostPerStage[currentStage];
+         var totalLevel = player.Level + (int)(player.Attributes?[Stats.MasterLevel] ?? 0);
+ 
+-        return costMultiplier * totalLevel;
++        var cost = costMultiplier * totalLevel;
++        if (player.GameContext.PlugInManager.GetPlugInPoint<IGameplayRateModifierPlugIn>() is { } plugInPoint)
++        {
++            var args = new GameplayRateArgs(GameplayRateKind.MuHelperZenCostMultiplier, 1.0);
++            plugInPoint.ModifyRate(player, args);
++            cost = (int)Math.Max(0, Math.Round(cost * args.Value));
++        }
++
++        return cost;
+     }
+ }
+\ No newline at end of file
+diff --git a/src/GameLogic/Offline/OfflinePlayer.cs b/src/GameLogic/Offline/OfflinePlayer.cs
+index d983608f3..3407bcb98 100644
+--- a/src/GameLogic/Offline/OfflinePlayer.cs
++++ b/src/GameLogic/Offline/OfflinePlayer.cs
+@@ -104,6 +104,12 @@ public class OfflinePlayer : Player
+     /// </summary>
+     public virtual bool RespawnAndContinue => false;
+ 
++    /// <summary>
++    /// Gets a value indicating whether this offline session keeps running when the account logs in again.
++    /// The account can then play with its other characters, but not with the character of this session.
++    /// </summary>
++    public virtual bool StaysOnLogin => false;
++
+     /// <summary>
+     /// Gets actions queued from outside the AI tick (e.g. skill learning on level-up), which the
+     /// <see cref="OfflinePlayerMuHelper"/> drains at the start of each tick. This serializes such
+diff --git a/src/GameLogic/Offline/OfflinePlayerManager.cs b/src/GameLogic/Offline/OfflinePlayerManager.cs
+index c025c2c87..a6db2b519 100644
+--- a/src/GameLogic/Offline/OfflinePlayerManager.cs
++++ b/src/GameLogic/Offline/OfflinePlayerManager.cs
+@@ -28,7 +28,20 @@ public sealed class OfflinePlayerManager
+     /// <param name="realPlayer">The real player who typed the command.</param>
+     /// <param name="loginName">The pre-validated account login name.</param>
+     /// <returns><c>true</c> if the offline session was started successfully.</returns>
+-    public async ValueTask<bool> StartAsync(Player realPlayer, string loginName)
++    public ValueTask<bool> StartAsync(Player realPlayer, string loginName)
++    {
++        return this.StartAsync(realPlayer, loginName, context => new OfflinePlayer(context), true);
++    }
++
++    /// <summary>
++    /// Starts an offline player session by replacing the real player with a copy which is created by the given factory.
++    /// </summary>
++    /// <param name="realPlayer">The real player who typed the command.</param>
++    /// <param name="loginName">The pre-validated account login name.</param>
++    /// <param name="offlinePlayerFactory">The factory which creates the offline player, e.g. a derived type with another behaviour.</param>
++    /// <param name="chargeInitialZenCost">If set to <c>true</c>, the initial zen cost of the MU helper is charged.</param>
++    /// <returns><c>true</c> if the offline session was started successfully.</returns>
++    public async ValueTask<bool> StartAsync(Player realPlayer, string loginName, Func<IGameContext, OfflinePlayer> offlinePlayerFactory, bool chargeInitialZenCost)
+     {
+         var characterName = realPlayer.SelectedCharacter?.Name;
+ 
+@@ -37,7 +50,7 @@ public sealed class OfflinePlayerManager
+             return false;
+         }
+ 
+-        var sentinel = new OfflinePlayer(realPlayer.GameContext);
++        var sentinel = offlinePlayerFactory(realPlayer.GameContext);
+ 
+         // Atomically claim the slot to prevent racing during initialization.
+         if (!this._activePlayers.TryAdd(loginName, sentinel))
+@@ -46,7 +59,7 @@ public sealed class OfflinePlayerManager
+             return false;
+         }
+ 
+-        if (!this.TryChargeInitialZenCost(realPlayer))
++        if (chargeInitialZenCost && !this.TryChargeInitialZenCost(realPlayer))
+         {
+             await this.RemoveAndDisposeAsync(loginName, sentinel).ConfigureAwait(false);
+             return false;
+diff --git a/src/GameLogic/PlayerActions/Character/SelectCharacterAction.cs b/src/GameLogic/PlayerActions/Character/SelectCharacterAction.cs
+index 42a326249..5d2bb7204 100644
+--- a/src/GameLogic/PlayerActions/Character/SelectCharacterAction.cs
++++ b/src/GameLogic/PlayerActions/Character/SelectCharacterAction.cs
+@@ -4,6 +4,8 @@
+ 
+ namespace MUnique.OpenMU.GameLogic.PlayerActions.Character;
+ 
++using MUnique.OpenMU.GameLogic.PlugIns;
++
+ /// <summary>
+ /// Action to select a character and enter the world with it.
+ /// </summary>
+@@ -24,7 +26,21 @@ public class SelectCharacterAction
+             return;
+         }
+ 
+-        await player.SetSelectedCharacterAsync(player.Account?.Characters.FirstOrDefault(c => c.Name.Equals(characterName))).ConfigureAwait(false);
++        var character = player.Account?.Characters.FirstOrDefault(c => c.Name.Equals(characterName));
++        if (character is not null
++            && player.GameContext.PlugInManager.GetPlugInPoint<ICharacterSelectingPlugIn>() is { } selectingPlugIn)
++        {
++            var cancelEventArgs = new System.ComponentModel.CancelEventArgs();
++            await selectingPlugIn.CharacterSelectingAsync(player, character, cancelEventArgs).ConfigureAwait(false);
++            if (cancelEventArgs.Cancel)
++            {
++                player.Logger.LogWarning("The selection of character [{0}] was prevented by a plugin.", characterName);
++                await player.DisconnectAsync().ConfigureAwait(false);
++                return;
++            }
++        }
++
++        await player.SetSelectedCharacterAsync(character).ConfigureAwait(false);
+         if (player.SelectedCharacter is null)
+         {
+             player.Logger.LogError("Could not select character because character not found: [{0}]", characterName);
+diff --git a/src/GameLogic/PlayerActions/Items/BaseItemCraftingHandler.cs b/src/GameLogic/PlayerActions/Items/BaseItemCraftingHandler.cs
+index 813481101..d12207321 100644
+--- a/src/GameLogic/PlayerActions/Items/BaseItemCraftingHandler.cs
++++ b/src/GameLogic/PlayerActions/Items/BaseItemCraftingHandler.cs
+@@ -42,6 +42,8 @@ public abstract class BaseItemCraftingHandler : IItemCraftingHandler
+ 
+         await player.InvokeViewPlugInAsync<IUpdateMoneyPlugIn>(p => p.UpdateMoneyAsync()).ConfigureAwait(false);
+ 
++        // Bonuses (e.g. of a premium membership) don't make the crafting more expensive, so they're applied after the payment.
++        successRate = ModifySuccessRate(player, successRate);
+         var success = Rand.NextRandomBool(successRate);
+         if (success)
+         {
+@@ -202,4 +204,22 @@ public abstract class BaseItemCraftingHandler : IItemCraftingHandler
+                 break;
+         }
+     }
++
++    private static byte ModifySuccessRate(Player player, byte successRate)
++    {
++        if (player.GameContext.PlugInManager.GetPlugInPoint<IGameplayRateModifierPlugIn>() is not { } plugInPoint)
++        {
++            return successRate;
++        }
++
++        var args = new GameplayRateArgs(GameplayRateKind.CraftingSuccessRate, successRate);
++        plugInPoint.ModifyRate(player, args);
++        var modified = (byte)Math.Clamp(Math.Round(args.Value), 0, 100);
++        if (modified != successRate)
++        {
++            player.Logger.LogInformation("Crafting success chance modified by plugins: {successRate} %", modified);
++        }
++
++        return modified;
++    }
+ }
+diff --git a/src/GameLogic/PlayerActions/Items/ItemCraftAction.cs b/src/GameLogic/PlayerActions/Items/ItemCraftAction.cs
+index d544efa24..0ee44bae9 100644
+--- a/src/GameLogic/PlayerActions/Items/ItemCraftAction.cs
++++ b/src/GameLogic/PlayerActions/Items/ItemCraftAction.cs
+@@ -5,6 +5,7 @@
+ namespace MUnique.OpenMU.GameLogic.PlayerActions.Items;
+ 
+ using MUnique.OpenMU.DataModel.Configuration.ItemCrafting;
++using MUnique.OpenMU.GameLogic.PlugIns;
+ using MUnique.OpenMU.GameLogic.Views.NPC;
+ 
+ /// <summary>
+@@ -37,6 +38,7 @@ public class ItemCraftAction
+             this._craftingHandlerCache.Add(crafting, craftingHandler);
+         }
+ 
++        var inputItems = player.TemporaryStorage?.Items.Select(i => new CraftingInputItem(i, i.Definition, i.Level)).ToList() ?? [];
+         (CraftingResult, Item?) result;
+         try
+         {
+@@ -48,6 +50,18 @@ public class ItemCraftAction
+         }
+ 
+         var itemList = player.TemporaryStorage?.Items.ToList() ?? new List<Item>();
++        if (player.GameContext.PlugInManager.GetPlugInPoint<IItemCraftingCompletedPlugIn>() is { } completedPlugIn)
++        {
++            try
++            {
++                await completedPlugIn.ItemCraftingCompletedAsync(player, new ItemCraftingCompletedArgs(crafting, result.Item1, result.Item2, inputItems, itemList)).ConfigureAwait(false);
++            }
++            catch (Exception ex)
++            {
++                player.Logger.LogError(ex, "Error in a plugin after the item crafting {crafting}.", crafting.Number);
++            }
++        }
++
+         await player.InvokeViewPlugInAsync<IShowItemCraftingResultPlugIn>(p => p.ShowResultAsync(result.Item1, itemList.Count > 1 ? null : result.Item2)).ConfigureAwait(false);
+         await player.InvokeViewPlugInAsync<IShowMerchantStoreItemListPlugIn>(
+             p => p.ShowMerchantStoreItemListAsync(
+diff --git a/src/GameLogic/PlayerActions/LoginAction.cs b/src/GameLogic/PlayerActions/LoginAction.cs
+index aff5d3aa2..5edcb10ff 100644
+--- a/src/GameLogic/PlayerActions/LoginAction.cs
++++ b/src/GameLogic/PlayerActions/LoginAction.cs
+@@ -125,7 +125,7 @@ public class LoginAction
+                 return (false, null);
+             }
+ 
+-            if (player.GameContext.OfflinePlayerManager.TryGetPlayer(username, out var offlinePlayer))
++            if (player.GameContext.OfflinePlayerManager.TryGetPlayer(username, out var offlinePlayer) && offlinePlayer?.StaysOnLogin is not true)
+             {
+                 var isTemplateOffline = offlinePlayer!.IsTemplatePlayer;
+                 if (!isTemplateOffline)
+diff --git a/src/GameLogic/PlugIns/GameplayRateArgs.cs b/src/GameLogic/PlugIns/GameplayRateArgs.cs
+new file mode 100644
+index 000000000..ca55324fd
+--- /dev/null
++++ b/src/GameLogic/PlugIns/GameplayRateArgs.cs
+@@ -0,0 +1,33 @@
++// <copyright file="GameplayRateArgs.cs" company="MUnique">
++// Licensed under the MIT License. See LICENSE file in the project root for full license information.
++// </copyright>
++
++namespace MUnique.OpenMU.GameLogic.PlugIns;
++
++/// <summary>
++/// The arguments of the <see cref="IGameplayRateModifierPlugIn"/>. Plugin points can't return
++/// values, so the rate is passed in and out through this object.
++/// </summary>
++public sealed class GameplayRateArgs
++{
++    /// <summary>
++    /// Initializes a new instance of the <see cref="GameplayRateArgs"/> class.
++    /// </summary>
++    /// <param name="kind">The kind of the rate.</param>
++    /// <param name="value">The initial value of the rate.</param>
++    public GameplayRateArgs(GameplayRateKind kind, double value)
++    {
++        this.Kind = kind;
++        this.Value = value;
++    }
++
++    /// <summary>
++    /// Gets the kind of the rate.
++    /// </summary>
++    public GameplayRateKind Kind { get; }
++
++    /// <summary>
++    /// Gets or sets the value of the rate. It can be modified by the plugins.
++    /// </summary>
++    public double Value { get; set; }
++}
+diff --git a/src/GameLogic/PlugIns/GameplayRateKind.cs b/src/GameLogic/PlugIns/GameplayRateKind.cs
+new file mode 100644
+index 000000000..8a5ab4b8d
+--- /dev/null
++++ b/src/GameLogic/PlugIns/GameplayRateKind.cs
+@@ -0,0 +1,26 @@
++// <copyright file="GameplayRateKind.cs" company="MUnique">
++// Licensed under the MIT License. See LICENSE file in the project root for full license information.
++// </copyright>
++
++namespace MUnique.OpenMU.GameLogic.PlugIns;
++
++/// <summary>
++/// The kinds of rates which can be modified by an <see cref="IGameplayRateModifierPlugIn"/>.
++/// </summary>
++public enum GameplayRateKind
++{
++    /// <summary>
++    /// A multiplier for the chance of the chance based item drop groups of a killed monster. The initial value is 1.0.
++    /// </summary>
++    ItemDropChanceMultiplier,
++
++    /// <summary>
++    /// The success rate of an item crafting in percent (0 to 100). The initial value is the rate of the crafting.
++    /// </summary>
++    CraftingSuccessRate,
++
++    /// <summary>
++    /// A multiplier for the zen cost of the MU helper. The initial value is 1.0.
++    /// </summary>
++    MuHelperZenCostMultiplier,
++}
+diff --git a/src/GameLogic/PlugIns/ICharacterSelectingPlugIn.cs b/src/GameLogic/PlugIns/ICharacterSelectingPlugIn.cs
+new file mode 100644
+index 000000000..39c9569d3
+--- /dev/null
++++ b/src/GameLogic/PlugIns/ICharacterSelectingPlugIn.cs
+@@ -0,0 +1,26 @@
++// <copyright file="ICharacterSelectingPlugIn.cs" company="MUnique">
++// Licensed under the MIT License. See LICENSE file in the project root for full license information.
++// </copyright>
++
++namespace MUnique.OpenMU.GameLogic.PlugIns;
++
++using System.ComponentModel;
++using System.Runtime.InteropServices;
++using MUnique.OpenMU.PlugIns;
++
++/// <summary>
++/// A plugin interface which is called before a character gets selected at the character selection.
++/// The selection can be cancelled, which disconnects the player.
++/// </summary>
++[Guid("B7D1E3A9-2C64-4F85-8E0B-91A6C5D3F27E")]
++[PlugInPoint("Character selecting", "Plugins which are called before a character gets selected, and can prevent the selection.")]
++public interface ICharacterSelectingPlugIn
++{
++    /// <summary>
++    /// Is called before the character gets selected.
++    /// </summary>
++    /// <param name="player">The player.</param>
++    /// <param name="character">The character which is about to be selected.</param>
++    /// <param name="cancelEventArgs">The cancel event arguments. Set <see cref="CancelEventArgs.Cancel"/> to prevent the selection.</param>
++    ValueTask CharacterSelectingAsync(Player player, Character character, CancelEventArgs cancelEventArgs);
++}
+diff --git a/src/GameLogic/PlugIns/IGameplayRateModifierPlugIn.cs b/src/GameLogic/PlugIns/IGameplayRateModifierPlugIn.cs
+new file mode 100644
+index 000000000..618faacd8
+--- /dev/null
++++ b/src/GameLogic/PlugIns/IGameplayRateModifierPlugIn.cs
+@@ -0,0 +1,28 @@
++// <copyright file="IGameplayRateModifierPlugIn.cs" company="MUnique">
++// Licensed under the MIT License. See LICENSE file in the project root for full license information.
++// </copyright>
++
++namespace MUnique.OpenMU.GameLogic.PlugIns;
++
++using System.Runtime.InteropServices;
++using MUnique.OpenMU.PlugIns;
++
++/// <summary>
++/// A plugin interface which is called when a player related rate is determined, so that it
++/// can be modified, e.g. by a premium membership.
++/// </summary>
++/// <remarks>
++/// Because the plugins are not called in a defined order, they should only apply factors or
++/// summands which are independent of each other.
++/// </remarks>
++[Guid("0C8F5A3E-6B1D-4E27-9F4A-2D7C1B8E5A90")]
++[PlugInPoint("Gameplay rate modifier", "Plugins which modify player related rates, like the item drop chance, the crafting success rate or the MU helper cost.")]
++public interface IGameplayRateModifierPlugIn
++{
++    /// <summary>
++    /// Is called when a rate is determined for the player.
++    /// </summary>
++    /// <param name="player">The player.</param>
++    /// <param name="args">The arguments, which hold the rate.</param>
++    void ModifyRate(Player player, GameplayRateArgs args);
++}
+diff --git a/src/GameLogic/PlugIns/IItemCraftingCompletedPlugIn.cs b/src/GameLogic/PlugIns/IItemCraftingCompletedPlugIn.cs
+new file mode 100644
+index 000000000..0248d5e0b
+--- /dev/null
++++ b/src/GameLogic/PlugIns/IItemCraftingCompletedPlugIn.cs
+@@ -0,0 +1,49 @@
++// <copyright file="IItemCraftingCompletedPlugIn.cs" company="MUnique">
++// Licensed under the MIT License. See LICENSE file in the project root for full license information.
++// </copyright>
++
++namespace MUnique.OpenMU.GameLogic.PlugIns;
++
++using System.Runtime.InteropServices;
++using MUnique.OpenMU.DataModel.Configuration.ItemCrafting;
++using MUnique.OpenMU.DataModel.Configuration.Items;
++using MUnique.OpenMU.GameLogic.Views.NPC;
++using MUnique.OpenMU.PlugIns;
++
++/// <summary>
++/// A plugin interface which is called after an item crafting (e.g. at the chaos machine) has been completed.
++/// </summary>
++[Guid("5E2B7C41-9A3F-4D68-B1E5-7F0A2C9D4B13")]
++[PlugInPoint("Item crafting completed", "Plugins which are called after an item crafting has been completed, successfully or not.")]
++public interface IItemCraftingCompletedPlugIn
++{
++    /// <summary>
++    /// Is called after an item crafting has been completed.
++    /// </summary>
++    /// <param name="player">The player who crafted.</param>
++    /// <param name="args">The arguments of the crafting.</param>
++    ValueTask ItemCraftingCompletedAsync(Player player, ItemCraftingCompletedArgs args);
++}
++
++/// <summary>
++/// The arguments of the <see cref="IItemCraftingCompletedPlugIn"/>.
++/// </summary>
++/// <param name="Crafting">The crafting definition.</param>
++/// <param name="Result">The result of the crafting.</param>
++/// <param name="ResultItem">The created or modified item, if the crafting was successful.</param>
++/// <param name="InputItems">The items which were put into the crafting, with their state before the crafting.</param>
++/// <param name="RemainingItems">The items which are left after the crafting.</param>
++public sealed record ItemCraftingCompletedArgs(
++    ItemCrafting Crafting,
++    CraftingResult Result,
++    Item? ResultItem,
++    IReadOnlyList<CraftingInputItem> InputItems,
++    IReadOnlyCollection<Item> RemainingItems);
++
++/// <summary>
++/// An item which was put into a crafting, with its state before the crafting.
++/// </summary>
++/// <param name="Item">The item.</param>
++/// <param name="Definition">The definition of the item.</param>
++/// <param name="Level">The level of the item before the crafting.</param>
++public sealed record CraftingInputItem(Item Item, ItemDefinition? Definition, byte Level);
+diff --git a/src/Persistence/EntityFramework/ItemStorageRepository.cs b/src/Persistence/EntityFramework/ItemStorageRepository.cs
+new file mode 100644
+index 000000000..44566115a
+--- /dev/null
++++ b/src/Persistence/EntityFramework/ItemStorageRepository.cs
+@@ -0,0 +1,65 @@
++// <copyright file="ItemStorageRepository.cs" company="MUnique">
++// Licensed under the MIT License. See LICENSE file in the project root for full license information.
++// </copyright>
++
++namespace MUnique.OpenMU.Persistence.EntityFramework;
++
++using System.Threading;
++using Microsoft.EntityFrameworkCore;
++using Microsoft.Extensions.Logging;
++using MUnique.OpenMU.Persistence.EntityFramework.Json;
++using MUnique.OpenMU.Persistence.EntityFramework.Model;
++
++/// <summary>
++/// Repository for item storages, which loads a storage with its items like the account repository
++/// loads an account: by a json query, with the references to the configuration (e.g. the item
++/// definitions) resolved to the cached configuration objects.
++/// </summary>
++/// <remarks>
++/// It's needed to load an item storage on its own, e.g. another vault of an account. The generic
++/// repository would load the items through the configuration repository of merchant store items.
++/// </remarks>
++internal class ItemStorageRepository : CachingGenericRepository<ItemStorage>
++{
++    /// <summary>
++    /// Initializes a new instance of the <see cref="ItemStorageRepository" /> class.
++    /// </summary>
++    /// <param name="repositoryProvider">The repository provider.</param>
++    /// <param name="loggerFactory">The logger factory.</param>
++    public ItemStorageRepository(IContextAwareRepositoryProvider repositoryProvider, ILoggerFactory loggerFactory)
++        : base(repositoryProvider, loggerFactory)
++    {
++    }
++
++    /// <inheritdoc />
++    public override async ValueTask<ItemStorage?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
++    {
++        cancellationToken.ThrowIfCancellationRequested();
++
++        (this.RepositoryProvider as ICacheAwareRepositoryProvider)?.EnsureCachesForCurrentGameConfiguration();
++
++        using var context = this.GetContext();
++        if (context.Context.ChangeTracker.Entries<ItemStorage>().FirstOrDefault(s => s.Entity.Id == id)?.Entity is { } tracked)
++        {
++            // Already loaded with its items, e.g. the vault which is in use.
++            return tracked;
++        }
++
++        await context.Context.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
++        try
++        {
++            var objectLoader = new AccountJsonObjectLoader((this.RepositoryProvider as CacheAwareRepositoryProvider)?.ConfigurationReferences);
++            var storage = await objectLoader.LoadObjectAsync<ItemStorage>(id, context.Context, cancellationToken).ConfigureAwait(false);
++            if (storage is not null && context.Context.Entry(storage).State == EntityState.Detached)
++            {
++                context.Context.Attach(storage);
++            }
++
++            return storage;
++        }
++        finally
++        {
++            await context.Context.Database.CloseConnectionAsync().ConfigureAwait(false);
++        }
++    }
++}
+diff --git a/src/Persistence/EntityFramework/NonCachingRepositoryProvider.cs b/src/Persistence/EntityFramework/NonCachingRepositoryProvider.cs
+index e5a5ffa27..0223e0fd5 100644
+--- a/src/Persistence/EntityFramework/NonCachingRepositoryProvider.cs
++++ b/src/Persistence/EntityFramework/NonCachingRepositoryProvider.cs
+@@ -36,6 +36,7 @@ internal class NonCachingRepositoryProvider : RepositoryProvider
+ 
+         this.RegisterRepository(new AccountRepository(this._parent ?? this, this.LoggerFactory)); // never cache accounts, so we pass this
+         this.RegisterRepository(new LetterBodyRepository(this._parent ?? this, this.LoggerFactory)); // never cache letters, so we pass this
++        this.RegisterRepository(new ItemStorageRepository(this._parent ?? this, this.LoggerFactory)); // loads a storage with its items, e.g. another vault
+ 
+         this.RegisterMissingRepositoriesAsGeneric();
+         base.Initialize();
+diff --git a/src/Startup/MUnique.OpenMU.Startup.csproj b/src/Startup/MUnique.OpenMU.Startup.csproj
+index 4ff7cb9d0..3662c9b4e 100644
+--- a/src/Startup/MUnique.OpenMU.Startup.csproj
++++ b/src/Startup/MUnique.OpenMU.Startup.csproj
+@@ -43,6 +43,8 @@
+     <ProjectReference Include="..\Persistence\Initialization\MUnique.OpenMU.Persistence.Initialization.csproj" />
+     <ProjectReference Include="..\Persistence\MUnique.OpenMU.Persistence.csproj" />
+     <ProjectReference Include="..\Telemetry\MUnique.OpenMU.Telemetry.csproj" />
++    <!-- MuCustom: our own plugins (server/custom), see server/custom/README.md -->
++    <ProjectReference Include="..\..\..\custom\MuCustom.PlugIns\MuCustom.PlugIns.csproj" />
+   </ItemGroup>
+ 
+ 
+diff --git a/src/Startup/Program.cs b/src/Startup/Program.cs
+index 48a58854a..6aadb167d 100644
+--- a/src/Startup/Program.cs
++++ b/src/Startup/Program.cs
+@@ -95,6 +95,9 @@ internal sealed class Program : IDisposable
+     /// <param name="args">The command line args.</param>
+     public static async Task Main(string[] args)
+     {
++        // MuCustom: loads our plugin assembly, so that its plugins are discovered.
++        MuCustom.PlugIns.MuCustomPlugIns.EnsureLoaded();
++
+         using var exitCts = new CancellationTokenSource();
+         var exitToken = exitCts.Token;
+ 

@@ -5,6 +5,9 @@ and slices them), so every classic window and dialog that uses them changes look
 changes: message boxes, the 190-wide panel frames (character, storage, trade, Chaos Machine,
 NPC shop...), their buttons and divider lines. Colours follow the modern HUD (Data/UI/theme.rcss).
 
+Textures are drawn at up to 4x the classic resolution; byte 0 of each file holds that factor, and
+the game reports the texture in classic pixels (see SkinTexelScale in GlobalBitmap.cpp).
+
 Output: OZT / OZJ files in <data>/Interface/Modern; PNG previews with --preview.
 
     python tools/ui_skin.py client-src/MuMain/src/bin/Data [--preview DIR]
@@ -19,7 +22,9 @@ import struct
 
 from PIL import Image, ImageDraw, ImageFont
 
-SS = 4  # supersampling for shapes and text
+SS = 8  # drawing resolution, in classic pixels; textures come out at SCALE (see texel_scale)
+SCALE = 1  # the texture's resolution, in classic pixels (set per texture by build())
+MAX_TEXTURE = 1024  # the game's largest texture side
 
 SURFACE = (13, 20, 30)          # panel body, like #0d141e
 HEADER_TOP = (31, 45, 66)       # #1f2d42
@@ -43,7 +48,23 @@ def canvas(width, height, color=(0, 0, 0, 0)):
 
 
 def finish(image, width, height):
-    return image.resize((width, height), Image.LANCZOS)
+    return image.resize((width * SCALE, height * SCALE), Image.LANCZOS)
+
+
+def next_pow2(value):
+    result = 1
+    while result < value:
+        result *= 2
+    return result
+
+
+def texel_scale(width, height):
+    """The finest power of two (up to 4x) whose texture still fits: the game pads textures to powers
+    of two and measures them in classic pixels, so the factor must keep that padding exact."""
+    scale = 4
+    while scale > 1 and max(next_pow2(width), next_pow2(height)) * scale > MAX_TEXTURE:
+        scale //= 2
+    return scale
 
 
 def vgradient(draw, box, top, bottom):
@@ -66,7 +87,7 @@ def msgbox_back():
     img = Image.new("RGB", (width, height), SURFACE)
     noise = Image.effect_noise((width, height), 6).convert("L")
     grain = Image.merge("RGB", [noise.point(lambda v, c=c: max(0, min(255, c + (v - 128) // 16))) for c in SURFACE])
-    return Image.blend(img, grain, 0.5)
+    return Image.blend(img, grain, 0.5).resize((width * SCALE, height * SCALE), Image.BICUBIC)
 
 
 def side_bands(draw, width, y0, y1, left=4, right=8):
@@ -166,8 +187,8 @@ STATE_STYLE = [
 ]
 
 
-def button_strip(width, height, states=3):
-    """An empty button: the game draws its text over it."""
+def button_canvas(width, height, states=3):
+    """The states of a button, stacked, at drawing resolution."""
     frame = height // states
     img = canvas(width, height)
     draw = ImageDraw.Draw(img)
@@ -181,14 +202,18 @@ def button_strip(width, height, states=3):
         vgradient(ImageDraw.Draw(fill), (0, s(y0), s(width), s(y0 + frame)), top, bottom)
         img.paste(fill, (0, 0), mask)
         draw.rounded_rectangle(box, radius=s(4), outline=border + (255,), width=SS)
-    return finish(img, width, height)
+    return img
+
+
+def button_strip(width, height, states=3):
+    """An empty button: the game draws its text over it."""
+    return finish(button_canvas(width, height, states), width, height)
 
 
 def labelled_button(width, height, label, color):
     """A 3-state button with its label centred (drawn with anchor 'mm')."""
     frame = height // 3
-    base = button_strip(width, height)
-    img = base.resize((width * SS, height * SS), Image.LANCZOS)
+    img = button_canvas(width, height)
     draw = ImageDraw.Draw(img)
     f = font(9.5)
     for i in range(3):
@@ -200,8 +225,7 @@ def labelled_button(width, height, label, color):
 
 def exit_button():
     width, height = 36, 58
-    base = button_strip(width, height, states=2)
-    img = base.resize((width * SS, height * SS), Image.LANCZOS)
+    img = button_canvas(width, height, states=2)
     draw = ImageDraw.Draw(img)
     for i in range(2):
         close_glyph(draw, width / 2, i * 29 + 14.5, 5)
@@ -216,48 +240,61 @@ def message_line():
     for x in range(width):
         t = 1 - abs(x - width / 2) / (width / 2)
         img.putpixel((x, height // 2), ACCENT + (int(200 * min(1, t * 2.5)),))
-    return img
+    return img.resize((width * SCALE, height * SCALE), Image.BICUBIC)
 
 
 def separate_line():
-    return Image.new("RGB", (205, 2), (28, 39, 54))
+    return Image.new("RGB", (205 * SCALE, 2 * SCALE), (28, 39, 54))
+
+
+# name -> (classic width, classic height, maker)
+TEXTURES = {
+    "newui_msgbox_back.jpg": (225, 512, msgbox_back),
+    "newui_msgbox_top.tga": (230, 67, msgbox_top),
+    "newui_Message_03.tga": (230, 67, lambda: msgbox_top(title_bar=True)),
+    "newui_msgbox_middle.tga": (230, 15, msgbox_middle),
+    "newui_msgbox_bottom.tga": (230, 50, msgbox_bottom),
+    "newui_item_back01.tga": (190, 64, panel_top),
+    "newui_item_back04.tga": (190, 64, lambda: panel_top(name_field=True)),
+    "newui_item_back02-L.tga": (21, 320, lambda: panel_side(True)),
+    "newui_item_back02-R.tga": (21, 320, lambda: panel_side(False)),
+    "newui_item_back03.tga": (190, 45, panel_bottom),
+    "newui_button_ok.tga": (54, 90, lambda: labelled_button(54, 90, "Aceptar", GREEN)),
+    "newui_button_cancel.tga": (54, 90, lambda: labelled_button(54, 90, "Cancelar", RED)),
+    "newui_button_close.tga": (54, 90, lambda: labelled_button(54, 90, "Cerrar", TEXT)),
+    "newui_btn_empty.tga": (108, 87, lambda: button_strip(108, 87)),
+    "newui_btn_empty_small.tga": (64, 87, lambda: button_strip(64, 87)),
+    "newui_btn_empty_big.tga": (180, 87, lambda: button_strip(180, 87)),
+    "newui_btn_empty_very_small.tga": (54, 69, lambda: button_strip(54, 69)),
+    "newui_exit_00.tga": (36, 58, exit_button),
+    "newui_Message_Line.tga": (223, 21, message_line),
+    "newui_separate_line.jpg": (205, 2, separate_line),
+}
 
 
 def build():
-    return {
-        "newui_msgbox_back.jpg": msgbox_back(),
-        "newui_msgbox_top.tga": msgbox_top(),
-        "newui_Message_03.tga": msgbox_top(title_bar=True),
-        "newui_msgbox_middle.tga": msgbox_middle(),
-        "newui_msgbox_bottom.tga": msgbox_bottom(),
-        "newui_item_back01.tga": panel_top(),
-        "newui_item_back04.tga": panel_top(name_field=True),
-        "newui_item_back02-L.tga": panel_side(True),
-        "newui_item_back02-R.tga": panel_side(False),
-        "newui_item_back03.tga": panel_bottom(),
-        "newui_button_ok.tga": labelled_button(54, 90, "Aceptar", GREEN),
-        "newui_button_cancel.tga": labelled_button(54, 90, "Cancelar", RED),
-        "newui_button_close.tga": labelled_button(54, 90, "Cerrar", TEXT),
-        "newui_btn_empty.tga": button_strip(108, 87),
-        "newui_btn_empty_small.tga": button_strip(64, 87),
-        "newui_btn_empty_big.tga": button_strip(180, 87),
-        "newui_btn_empty_very_small.tga": button_strip(54, 69),
-        "newui_exit_00.tga": exit_button(),
-        "newui_Message_Line.tga": message_line(),
-        "newui_separate_line.jpg": separate_line(),
-    }
+    """name -> (image, scale)."""
+    global SCALE
+    result = {}
+    for name, (width, height, maker) in TEXTURES.items():
+        SCALE = texel_scale(width, height)
+        image = maker()
+        assert image.size == (width * SCALE, height * SCALE), (name, image.size)
+        result[name] = (image, SCALE)
+    SCALE = 1
+    return result
 
 
-def write(name: str, image: Image.Image, folder: pathlib.Path):
+def write(name: str, image: Image.Image, scale: int, folder: pathlib.Path):
     stem, ext = name.rsplit(".", 1)
     if ext == "jpg":
         buffer = io.BytesIO()
         image.convert("RGB").save(buffer, "JPEG", quality=95)
-        # .ozj: 24 bytes the loader skips, then the JPEG.
-        (folder / f"{stem}.OZJ").write_bytes(bytes(24) + buffer.getvalue())
+        # .ozj: 24 bytes the loader skips (the first: the texel scale), then the JPEG.
+        (folder / f"{stem}.OZJ").write_bytes(bytes([scale]) + bytes(23) + buffer.getvalue())
     else:
         width, height = image.size
-        header = bytes([0, 0, 2, 0]) + struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, width, height, 32, 8)
+        header = bytes([scale, 0, 2, 0]) + struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, width, height, 32, 8)
         pixels = image.convert("RGBA").transpose(Image.FLIP_TOP_BOTTOM).tobytes("raw", "BGRA")
         (folder / f"{stem}.OZT").write_bytes(header + pixels)
 
@@ -271,12 +308,12 @@ def main():
     out = args.data / "Interface" / "Modern"
     out.mkdir(parents=True, exist_ok=True)
     textures = build()
-    for name, image in textures.items():
-        write(name, image, out)
-        print(f"{name}: {image.size[0]}x{image.size[1]}")
+    for name, (image, scale) in textures.items():
+        write(name, image, scale, out)
+        print(f"{name}: {image.size[0]}x{image.size[1]} ({scale}x)")
     if args.preview:
         args.preview.mkdir(parents=True, exist_ok=True)
-        for name, image in textures.items():
+        for name, (image, _) in textures.items():
             image.save(args.preview / (name.rsplit(".", 1)[0] + ".png"))
 
 
